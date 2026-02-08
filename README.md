@@ -1,3 +1,5 @@
+https://dganev.com/posts/2026-01-24-bypassing-copilot-requests/
+
 # Agentic Task Queue
 
 A web-based task queue server designed for orchestrating LLM agents. It provides a Kanban-style UI for managing tasks and a simple HTTP API for agents to poll for work and submit results.
