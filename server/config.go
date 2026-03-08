@@ -117,23 +117,65 @@ Before doing any work, the subagent must first change to this directory:
 cd ` + wd + `
 ` + "```" + `
 
-Your task is to follow the instructions at the ` + "`/task`" + ` endpoint.
-For each instruction, you will start a sub agent using the ` + "`runSubagent`" + ` tool.
-The subagent must know what task ID is given, so that he can issue a request later on.
+## API (v2)
 
-At the end of each sub agent, the sub agent must produce a summarized output
-of what it has done in a few points, the sub agent then will then issue this request using curl:
+All orchestrator communication uses the v2 JSON API.
+
+### 1. Claim a task
 
 ` + "```" + `
-POST http://127.0.0.1:8080/save
-Content-Type: application/x-www-form-urlencoded
-task_id=<task_id>&message=<summarized_output_here>
+POST http://127.0.0.1:8080/api/v2/projects/default/tasks/claim-next
+Content-Type: application/json
+
+{"agent_id": "copilot"}
 ` + "```" + `
 
-After that the subagent would return the control back to the main orchestrator, which will poll
-the ` + "`/task`" + ` endpoint after 15 seconds for new instructions. Use bash command to wait it out and
-then issue a new request towards ` + "`/task`" + `. If there is a new task at hand follow the instructions
-in the beginning again.
+Response (200):
+` + "```json" + `
+{
+  "task": { "id": 123, "title": "...", "instructions": "...", "status": "IN_PROGRESS", ... },
+  "context": { ... },
+  "run": { "id": "...", ... }
+}
+` + "```" + `
+
+If no tasks are available, the response is 404. Poll again after 15 seconds.
+The response contains the task ID, instructions, and assembled context.
+
+### 2. Complete a task
+
+` + "```" + `
+POST http://127.0.0.1:8080/api/v2/tasks/<task_id>/complete
+Content-Type: application/json
+
+{
+  "output": "<summarized_output_here>",
+  "result": {
+    "summary": "Brief description of what was done",
+    "changes_made": ["change 1", "change 2"],
+    "files_touched": ["file1.go", "file2.go"]
+  }
+}
+` + "```" + `
+
+### 3. List tasks (optional)
+
+` + "```" + `
+GET http://127.0.0.1:8080/api/v2/tasks?status=pending
+` + "```" + `
+
+## Workflow
+
+For each instruction, start a sub agent using the ` + "`runSubagent`" + ` tool.
+The subagent must know the task ID so it can complete the task via the v2 API.
+
+At the end of each sub agent, it must:
+1. Produce a summarized output of what it has done
+2. Complete the task using the v2 endpoint above
+
+After that the subagent returns control to the main orchestrator, which will
+claim the next task after 15 seconds. Use bash command to wait it out and
+then claim the next task. If a new task is claimed, follow these instructions again.
 
 Important Note:
 

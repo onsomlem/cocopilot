@@ -830,10 +830,13 @@ const tools = [
   },
   {
     name: "coco.task.claim",
-    description: "Claim the next task from the Cocopilot API (v1 GET /task).",
+    description: "Claim the next available task from the Cocopilot API (v2 POST /api/v2/projects/{project_id}/tasks/claim-next).",
     inputSchema: {
       type: "object",
-      properties: {},
+      properties: {
+        project_id: { type: "string", description: "Project ID (defaults to 'default')" },
+        agent_id: { type: "string", description: "Agent ID (defaults to 'mcp-agent')" },
+      },
       additionalProperties: false,
     },
   },
@@ -851,7 +854,7 @@ const tools = [
   },
   {
     name: "coco.task.save",
-    description: "Save task output to the Cocopilot API (v1 POST /save).",
+    description: "Complete a task with output via the Cocopilot API (v2 POST /api/v2/tasks/{task_id}/complete).",
     inputSchema: {
       type: "object",
       properties: {
@@ -1895,9 +1898,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === "coco.task.claim") {
-    const result = await fetchText("/task");
+    const projectId = encodeURIComponent(String(args?.project_id || "default"));
+    const agentId = String(args?.agent_id || "mcp-agent");
+    const result = await fetchJson(`/api/v2/projects/${projectId}/tasks/claim-next`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ agent_id: agentId }),
+    });
     return {
-      content: [{ type: "text", text: result }],
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
     };
   }
 
@@ -1916,24 +1925,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === "coco.task.save") {
-    const params = new URLSearchParams();
-    if (args?.task_id !== undefined) {
-      params.set("task_id", String(args.task_id));
+    if (args?.task_id === undefined || args.task_id === null || args.task_id === "") {
+      throw new Error("task_id is required.");
     }
-    if (typeof args?.message === "string") {
-      params.set("message", args.message);
-    }
-
-    const result = await fetchText("/save", {
+    const taskId = encodeURIComponent(String(args.task_id));
+    const result = await fetchJson(`/api/v2/tasks/${taskId}/complete`, {
       method: "POST",
-      headers: {
-        "content-type": "application/x-www-form-urlencoded",
-      },
-      body: params.toString(),
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        output: typeof args?.message === "string" ? args.message : "",
+        result: { summary: typeof args?.message === "string" ? args.message : "" },
+      }),
     });
-
     return {
-      content: [{ type: "text", text: result }],
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
     };
   }
 
