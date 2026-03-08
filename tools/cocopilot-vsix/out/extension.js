@@ -36,6 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
+const sidebar_1 = require("./sidebar");
 function activate(context) {
     console.log("cocopilot-vsix activated");
     let mcpTerminal;
@@ -2306,6 +2307,45 @@ function activate(context) {
     context.subscriptions.push(statusBar);
     context.subscriptions.push(mcpStatusBar);
     context.subscriptions.push(outputChannel);
+    // ---- Sidebar Tree Views ----
+    const taskTreeProvider = new sidebar_1.TaskTreeProvider();
+    const projectTreeProvider = new sidebar_1.ProjectTreeProvider();
+    vscode.window.registerTreeDataProvider("cocopilot.tasksView", taskTreeProvider);
+    vscode.window.registerTreeDataProvider("cocopilot.projectsView", projectTreeProvider);
+    context.subscriptions.push(vscode.commands.registerCommand("cocopilot.refreshTasks", () => {
+        taskTreeProvider.refresh();
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand("cocopilot.refreshProjects", () => {
+        projectTreeProvider.refresh();
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand("cocopilot.sidebarTaskDetail", async (task) => {
+        const lines = [
+            `# Task #${task.id}: ${task.title}`,
+            "",
+            `**Status:** ${task.status}`,
+            `**Type:** ${task.type || "—"}`,
+            `**Priority:** ${task.priority ?? "—"}`,
+            task.tags && task.tags.length
+                ? `**Tags:** ${task.tags.join(", ")}`
+                : "",
+            "",
+            "## Instructions",
+            "",
+            task.instructions || "(none)",
+        ].filter((l) => l !== undefined);
+        const doc = await vscode.workspace.openTextDocument({
+            content: lines.join("\n"),
+            language: "markdown",
+        });
+        await vscode.window.showTextDocument(doc, { preview: true });
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand("cocopilot.sidebarSelectProject", async (project) => {
+        await vscode.workspace
+            .getConfiguration("cocopilot")
+            .update("projectId", project.id, vscode.ConfigurationTarget.Workspace);
+        vscode.window.showInformationMessage(`Cocopilot: Switched to project "${project.name}" (${project.id})`);
+        taskTreeProvider.refresh();
+    }));
 }
 function deactivate() {
     console.log("cocopilot-vsix deactivated");

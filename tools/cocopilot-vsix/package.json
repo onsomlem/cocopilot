@@ -17,6 +17,10 @@
   "main": "./out/extension.js",
   "activationEvents": [
     "onStartupFinished",
+    "onView:cocopilot.tasksView",
+    "onView:cocopilot.projectsView",
+    "onCommand:cocopilot.refreshTasks",
+    "onCommand:cocopilot.refreshProjects",
     "onCommand:cocopilot.hello",
     "onCommand:cocopilot.configureMcp",
     "onCommand:cocopilot.openMcpConfig",
@@ -82,7 +86,48 @@
     "onCommand:cocopilot.showTasks"
   ],
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "cocopilot-sidebar",
+          "title": "Cocopilot",
+          "icon": "$(tasklist)"
+        }
+      ]
+    },
+    "views": {
+      "cocopilot-sidebar": [
+        {
+          "id": "cocopilot.tasksView",
+          "name": "Tasks"
+        },
+        {
+          "id": "cocopilot.projectsView",
+          "name": "Projects"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "cocopilot.tasksView",
+        "contents": "No tasks found.\n[Create Task](command:cocopilot.createTask)\n[Refresh](command:cocopilot.refreshTasks)"
+      },
+      {
+        "view": "cocopilot.projectsView",
+        "contents": "No projects found.\n[Refresh](command:cocopilot.refreshProjects)"
+      }
+    ],
     "commands": [
+      {
+        "command": "cocopilot.refreshTasks",
+        "title": "Cocopilot: Refresh Tasks",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "cocopilot.refreshProjects",
+        "title": "Cocopilot: Refresh Projects",
+        "icon": "$(refresh)"
+      },
       {
         "command": "cocopilot.hello",
         "title": "Cocopilot: Hello"
@@ -337,6 +382,23 @@
       }
     ],
     "menus": {
+      "view/title": [
+        {
+          "command": "cocopilot.refreshTasks",
+          "when": "view == cocopilot.tasksView",
+          "group": "navigation"
+        },
+        {
+          "command": "cocopilot.createTask",
+          "when": "view == cocopilot.tasksView",
+          "group": "navigation"
+        },
+        {
+          "command": "cocopilot.refreshProjects",
+          "when": "view == cocopilot.projectsView",
+          "group": "navigation"
+        }
+      ],
       "commandPalette": [
         {
           "command": "cocopilot.openApiDocs"

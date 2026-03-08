@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { TaskTreeProvider, ProjectTreeProvider } from "./sidebar";
 
 export function activate(context: vscode.ExtensionContext) {
   console.log("cocopilot-vsix activated");
@@ -3006,6 +3007,70 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(statusBar);
   context.subscriptions.push(mcpStatusBar);
   context.subscriptions.push(outputChannel);
+
+  // ---- Sidebar Tree Views ----
+  const taskTreeProvider = new TaskTreeProvider();
+  const projectTreeProvider = new ProjectTreeProvider();
+
+  vscode.window.registerTreeDataProvider(
+    "cocopilot.tasksView",
+    taskTreeProvider
+  );
+  vscode.window.registerTreeDataProvider(
+    "cocopilot.projectsView",
+    projectTreeProvider
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("cocopilot.refreshTasks", () => {
+      taskTreeProvider.refresh();
+    })
+  );
+  context.subscriptions.push(
+    vscode.commands.registerCommand("cocopilot.refreshProjects", () => {
+      projectTreeProvider.refresh();
+    })
+  );
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "cocopilot.sidebarTaskDetail",
+      async (task: { id: number; title: string; status: string; instructions?: string; type?: string; priority?: number; tags?: string[] }) => {
+        const lines = [
+          `# Task #${task.id}: ${task.title}`,
+          "",
+          `**Status:** ${task.status}`,
+          `**Type:** ${task.type || "—"}`,
+          `**Priority:** ${task.priority ?? "—"}`,
+          task.tags && task.tags.length
+            ? `**Tags:** ${task.tags.join(", ")}`
+            : "",
+          "",
+          "## Instructions",
+          "",
+          task.instructions || "(none)",
+        ].filter((l) => l !== undefined);
+        const doc = await vscode.workspace.openTextDocument({
+          content: lines.join("\n"),
+          language: "markdown",
+        });
+        await vscode.window.showTextDocument(doc, { preview: true });
+      }
+    )
+  );
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "cocopilot.sidebarSelectProject",
+      async (project: { id: string; name: string }) => {
+        await vscode.workspace
+          .getConfiguration("cocopilot")
+          .update("projectId", project.id, vscode.ConfigurationTarget.Workspace);
+        vscode.window.showInformationMessage(
+          `Cocopilot: Switched to project "${project.name}" (${project.id})`
+        );
+        taskTreeProvider.refresh();
+      }
+    )
+  );
 }
 
 export function deactivate() {
