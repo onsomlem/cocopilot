@@ -1,0 +1,6 @@
+src/
+scripts/
+*.ts
+!*.d.ts
+.env*
+node_modules/

@@ -1,225 +1,134 @@
-https://dganev.com/posts/2026-01-24-bypassing-copilot-requests/
+# Cocopilot — Agentic Task Queue
 
-# Agentic Task Queue
+A web-based task queue server for orchestrating LLM agents. Provides a Kanban-style UI and HTTP APIs (v1 + v2) for agents to poll for work and submit results. Runs as a single binary backed by SQLite — no external services required.
 
-A web-based task queue server designed for orchestrating LLM agents. It provides a Kanban-style UI for managing tasks and a simple HTTP API for agents to poll for work and submit results.
-
-## Prerequisites
-
-- Go 1.21 or later
-- SQLite3 (included via go-sqlite3)
-
-## Installation
+## Quick Start
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd theinf-loop
-
-# Install dependencies
-go mod download
-
-# Build the server
-go build -o task-server .
+go build -o cocopilot ./cmd/cocopilot
+./cocopilot                     # starts on http://127.0.0.1:8080
+# Open the URL in your browser — that's it.
 ```
 
-## Running the Server
+Or with Make:
 
 ```bash
-# Run directly
-go run main.go
-
-# Or run the built binary
-./task-server
+make build && ./cocopilot
 ```
 
-The server starts on `http://0.0.0.0:8000`.
+## Build
 
-## Web Interface
-
-Open `http://127.0.0.1:8000` in your browser to access the Kanban board UI where you can:
-
-- Create new tasks
-- View tasks in three columns: To Do, In Progress, Done
-- Drag and drop tasks between columns
-- Delete tasks
-- Set the working directory for agents
-- View task outputs
-
-## API Endpoints
-
-### Get Next Task
-
-```
-GET /task
-```
-
-Returns the next available task (oldest NOT_PICKED task first). Automatically marks the task as IN_PROGRESS.
-
-**Response (task available):**
-```
-AVAILABLE TASK ID: 1
-TASK_STATUS: IN_PROGRESS
-
-Instructions:
-<task instructions here>
-```
-
-**Response (no tasks):**
-```
-No tasks available.
-Wait 15 secs for new instructions.
-```
-
-### Create Task
-
-```
-POST /create
-Content-Type: application/x-www-form-urlencoded
-
-instructions=<task instructions>&parent_task_id=<optional parent id>
-```
-
-**Response:**
-```json
-{"success": true, "task_id": 1}
-```
-
-### Save Task Output
-
-```
-POST /save
-Content-Type: application/x-www-form-urlencoded
-
-task_id=<id>&message=<output summary>
-```
-
-Marks the task as COMPLETE and stores the output.
-
-### Update Task Status
-
-```
-POST /update-status
-Content-Type: application/x-www-form-urlencoded
-
-task_id=<id>&status=<NOT_PICKED|IN_PROGRESS|COMPLETE>
-```
-
-### Delete Task
-
-```
-POST /delete
-Content-Type: application/x-www-form-urlencoded
-
-task_id=<id>
-```
-
-### Get All Tasks (JSON)
-
-```
-GET /api/tasks
-```
-
-### Get/Set Working Directory
-
-```
-GET /api/workdir
-POST /set-workdir (workdir=<path>)
-```
-
-### Server-Sent Events
-
-```
-GET /events
-```
-
-Real-time task updates for the web UI.
-
-### Get Agent Instructions
-
-```
-GET /instructions
-```
-
-Returns the initial instructions for setting up an agent.
-
-## Tutorial: Using with an LLM Agent
-
-### Step 1: Start the Server
+Requires **Go 1.21+**. No CGO — uses pure-Go SQLite (`modernc.org/sqlite`).
 
 ```bash
-go run main.go
+make build          # build for current platform → ./cocopilot
+make build-all      # cross-compile darwin/linux amd64/arm64 → dist/
+make test           # go test -race -timeout 180s ./...
+make lint           # go vet ./...
+make clean          # remove build artifacts
 ```
 
-### Step 2: Set the Working Directory
+Release packaging: `scripts/package.sh` builds the binary and creates a clean zip in `dist/`.
 
-Open `http://127.0.0.1:8000` and set the working directory where your agents should operate.
+## Configuration
 
-### Step 3: Create a Task
+All settings are via environment variables. Defaults are safe for local use.
 
-Click "New Task" and enter instructions for your agent:
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `COCO_DB_PATH` | `./tasks.db` | SQLite database file path |
+| `COCO_HTTP_ADDR` | `127.0.0.1:8080` | Server listen address |
+| `COCO_REQUIRE_API_KEY` | `false` | Require API key for mutations |
+| `COCO_API_KEY` | — | Shared API key (when auth enabled) |
+| `COCO_NO_BROWSER` | `false` | Suppress auto-opening browser on start |
+| `COCO_AUTOMATION_RULES` | — | JSON array of automation rules |
+| `COCO_MAX_AUTOMATION_DEPTH` | `5` | Max automation recursion depth |
+| `COCO_AUTOMATION_RATE_LIMIT` | `100` | Max automation executions/hour |
+| `COCO_AUTOMATION_BURST_LIMIT` | `10` | Max automation executions/minute |
+| `COCO_EVENTS_RETENTION_DAYS` | `30` | Auto-prune events older than N days |
+| `COCO_EVENTS_RETENTION_MAX` | `0` | Max event rows to keep (0 = unlimited) |
 
-```
-Create a Python script that prints "Hello, World!"
-```
+## API Overview
 
-### Step 4: Start Your Agent
+### v1 (form-encoded, plain-text responses)
 
-Give your LLM agent these initial instructions:
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/task` | GET | Poll for next available task |
+| `/create` | POST | Create a new task |
+| `/save` | POST | Save task output / results |
+| `/update-status` | POST | Update task status |
+| `/delete` | POST | Delete a task |
+| `/events` | GET | SSE stream (real-time updates) |
 
-```
-See http://127.0.0.1:8000/instructions use curl to get the instructions and proceed with it. Do not stop when there are no new tasks!
-```
+### v2 (JSON request/response)
 
-### Step 5: Agent Workflow
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v2/projects` | GET/POST | List or create projects |
+| `/api/v2/projects/{id}/tasks` | GET/POST | List or create tasks in a project |
+| `/api/v2/tasks/{id}` | GET/PATCH/DELETE | Task CRUD |
+| `/api/v2/tasks/{id}/claim` | POST | Claim a task (lease-based) |
+| `/api/v2/runs/{id}` | GET/PATCH | Run details and updates |
+| `/api/v2/events` | GET | List events |
+| `/api/v2/events/stream` | GET | SSE stream (v2 format) |
+| `/api/v2/agents` | GET/POST | Agent registration |
+| `/api/v2/health` | GET | Health check |
+| `/api/v2/status` | GET | Server status overview |
+| `/api/v2/metrics` | GET | Detailed metrics |
+| `/api/v2/config` | GET | Runtime configuration |
+| `/api/v2/backup` | GET | Download database backup |
+| `/api/v2/restore` | POST | Upload database restore |
 
-The agent will:
-
-1. Poll `GET /task` to receive work
-2. Execute the task instructions
-3. Submit results via `POST /save`:
-   ```bash
-   curl -X POST http://127.0.0.1:8000/save \
-     -d "task_id=1" \
-     -d "message=Created hello.py script that prints Hello World"
-   ```
-4. Wait 15 seconds
-5. Poll `/task` again for the next task
-
-### Step 6: Chain Tasks
-
-Tasks can have parent-child relationships. When creating a task, select a parent task to build context chains. Child tasks automatically receive context from their parent's output.
-
-## Task States
-
-| Status | Description |
-|--------|-------------|
-| `NOT_PICKED` | Task is queued, waiting to be picked up |
-| `IN_PROGRESS` | Task has been assigned to an agent |
-| `COMPLETE` | Task finished, output saved |
+v2 errors follow the format: `{"error": {"code": "...", "message": "...", "details": {...}}}`
 
 ## Database
 
-Tasks are stored in `tasks.db` (SQLite) in the current directory. Delete this file to reset all tasks.
+SQLite database auto-creates on first run. Migrations apply automatically on startup.
 
-## Architecture
-
-```
-┌─────────────────┐     ┌─────────────────┐
-│   Web Browser   │────▶│   Go Server     │
-│  (Kanban UI)    │◀────│   :8000         │
-└─────────────────┘     └────────┬────────┘
-                                 │
-┌─────────────────┐              │
-│   LLM Agent     │──────────────┤
-│  (polls /task)  │              │
-└─────────────────┘              ▼
-                        ┌─────────────────┐
-                        │   SQLite DB     │
-                        │   tasks.db      │
-                        └─────────────────┘
+```bash
+./cocopilot migrate status   # check migration status
+./cocopilot migrate up       # apply migrations manually
 ```
 
-## License
+Delete `tasks.db` to reset (migrations reapply on next start).
 
-MIT
+## Security — Local Only
+
+Cocopilot is designed for **local / single-machine use**. It is NOT intended for public deployment.
+
+- Default bind address is `127.0.0.1:8080` (localhost only).
+- Do **not** bind to `0.0.0.0` in production or on untrusted networks.
+- Enable API key auth for any non-trivial use: `COCO_REQUIRE_API_KEY=true COCO_API_KEY=<secret>`.
+- The database file contains all task data — protect it accordingly.
+- No TLS built in. Use a reverse proxy if you need HTTPS.
+
+## Documentation
+
+| File | Description |
+|------|-------------|
+| [docs/quickstart.md](docs/quickstart.md) | Getting started guide |
+| [docs/api/v2-summary.md](docs/api/v2-summary.md) | API v2 reference |
+| [docs/security.md](docs/security.md) | Security guide |
+| [docs/threat-model.md](docs/threat-model.md) | Threat model |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | Troubleshooting |
+| [docs/task-authoring.md](docs/task-authoring.md) | Task writing best practices |
+| [MIGRATIONS.md](MIGRATIONS.md) | Migration system details |
+
+## Tooling
+
+| Directory | Description |
+|-----------|-------------|
+| `tools/cocopilot-mcp` | MCP server for VS Code integration (Node.js) |
+| `tools/cocopilot-vsix` | VS Code extension scaffold |
+
+See each tool's README for setup instructions.
+
+## Benchmarks
+
+```bash
+go test -bench . -benchtime 5x -timeout 60s .
+```
+
+Benchmarks cover task creation, claim throughput, concurrent claim contention,
+and list endpoint performance. See `load_test.go`.

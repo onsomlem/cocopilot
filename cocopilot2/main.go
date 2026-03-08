@@ -48,7 +48,7 @@ At the end of each sub agent, the sub agent must produce a summarized output
 of what it has done in a few points, the sub agent then will then issue this request using curl:
 
 ` + "```" + `
-POST http://127.0.0.1:8000/save
+POST http://127.0.0.1:8001/save
 Content-Type: application/x-www-form-urlencoded
 task_id=<task_id>&message=<summarized_output_here>
 ` + "```" + `
@@ -1186,7 +1186,7 @@ const htmlTemplate = `
                         </div>
                         <div class="code-content">
                             <pre x-ref="instructionsText">
-                            See http://127.0.0.1:8000/instructions use curl to get the instructions and proceed with it. Do not stop when there are no new tasks!
+                            See http://127.0.0.1:8001/instructions use curl to get the instructions and proceed with it. Do not stop when there are no new tasks!
                             </pre>
                         </div>
                     </div>
@@ -1613,6 +1613,6 @@ func main() {
 	http.HandleFunc("/set-workdir", setWorkdirHandler)
 	http.HandleFunc("/delete", deleteTaskHandler)
 
-	log.Println("Starting Agentic Task Queue server on http://0.0.0.0:8000")
-	log.Fatal(http.ListenAndServe("0.0.0.0:8000", nil))
+	log.Println("Starting Agentic Task Queue server on http://0.0.0.0:8001")
+	log.Fatal(http.ListenAndServe("0.0.0.0:8001", nil))
 }

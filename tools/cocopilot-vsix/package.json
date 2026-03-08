@@ -1,0 +1,508 @@
+{
+  "name": "cocopilot-vsix",
+  "displayName": "Cocopilot VSIX",
+  "description": "Minimal VS Code extension scaffold.",
+  "version": "0.0.1",
+  "publisher": "cocopilot",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:cocopilot.hello",
+    "onCommand:cocopilot.configureMcp",
+    "onCommand:cocopilot.openMcpConfig",
+    "onCommand:cocopilot.startMcpServer",
+    "onCommand:cocopilot.stopMcpServer",
+    "onCommand:cocopilot.openDashboard",
+    "onCommand:cocopilot.openTasksBoard",
+    "onCommand:cocopilot.openHealth",
+    "onCommand:cocopilot.openConfig",
+    "onCommand:cocopilot.openVersion",
+    "onCommand:cocopilot.openEvents",
+    "onCommand:cocopilot.openEventsStream",
+    "onCommand:cocopilot.openAgents",
+    "onCommand:cocopilot.openLeases",
+    "onCommand:cocopilot.openTasksApi",
+    "onCommand:cocopilot.openTaskDetail",
+    "onCommand:cocopilot.openRunDetail",
+    "onCommand:cocopilot.openProjectDetail",
+    "onCommand:cocopilot.openProjectTree",
+    "onCommand:cocopilot.openProjectAudit",
+    "onCommand:cocopilot.openProjectChanges",
+    "onCommand:cocopilot.openProjectMemory",
+    "onCommand:cocopilot.openProjectEventsReplay",
+    "onCommand:cocopilot.openPolicies",
+    "onCommand:cocopilot.openPolicyDetail",
+    "onCommand:cocopilot.listPolicies",
+    "onCommand:cocopilot.createPolicy",
+    "onCommand:cocopilot.updatePolicy",
+    "onCommand:cocopilot.togglePolicy",
+    "onCommand:cocopilot.deletePolicy",
+    "onCommand:cocopilot.createTask",
+    "onCommand:cocopilot.saveTask",
+    "onCommand:cocopilot.updateStatus",
+    "onCommand:cocopilot.updateTask",
+    "onCommand:cocopilot.deleteTask",
+    "onCommand:cocopilot.listTasks",
+    "onCommand:cocopilot.claimTask",
+    "onCommand:cocopilot.failTask",
+    "onCommand:cocopilot.openSettings",
+    "onCommand:cocopilot.showQuickStart",
+    "onCommand:cocopilot.setProjectId",
+    "onCommand:cocopilot.setApiBase",
+    "onCommand:cocopilot.openApiDocs",
+    "onCommand:cocopilot.openOpenApiSpec",
+    "onCommand:cocopilot.openApiSummary",
+    "onCommand:cocopilot.openApiDesign",
+    "onCommand:cocopilot.openApiCompatibility",
+    "onCommand:cocopilot.openApiRoadmap",
+    "onCommand:cocopilot.openMigrationsDocs",
+    "onCommand:cocopilot.openRoadmap",
+    "onCommand:cocopilot.openKbOverview",
+    "onCommand:cocopilot.openStateDocs",
+    "onCommand:cocopilot.openStateArchitecture",
+    "onCommand:cocopilot.openStateDecisions",
+    "onCommand:cocopilot.openStateCurrent",
+    "onCommand:cocopilot.openStateNext",
+    "onCommand:cocopilot.openStateRisks",
+    "onCommand:cocopilot.openMcpReadme",
+    "onCommand:cocopilot.openMcpTools",
+    "onCommand:cocopilot.showLogs",
+    "onCommand:cocopilot.startServer",
+    "onCommand:cocopilot.stopServer",
+    "onCommand:cocopilot.showTasks"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "cocopilot.hello",
+        "title": "Cocopilot: Hello"
+      },
+      {
+        "command": "cocopilot.configureMcp",
+        "title": "Cocopilot: Configure MCP"
+      },
+      {
+        "command": "cocopilot.openMcpConfig",
+        "title": "Cocopilot: Open MCP Config"
+      },
+      {
+        "command": "cocopilot.startMcpServer",
+        "title": "Cocopilot: Start MCP Server"
+      },
+      {
+        "command": "cocopilot.stopMcpServer",
+        "title": "Cocopilot: Stop MCP Server"
+      },
+      {
+        "command": "cocopilot.openDashboard",
+        "title": "Cocopilot: Open Dashboard"
+      },
+      {
+        "command": "cocopilot.openTasksBoard",
+        "title": "Cocopilot: Open Tasks Board"
+      },
+      {
+        "command": "cocopilot.openHealth",
+        "title": "Cocopilot: Open Health"
+      },
+      {
+        "command": "cocopilot.openConfig",
+        "title": "Cocopilot: Open Config"
+      },
+      {
+        "command": "cocopilot.openVersion",
+        "title": "Cocopilot: Open Version"
+      },
+      {
+        "command": "cocopilot.openEvents",
+        "title": "Cocopilot: Open Events"
+      },
+      {
+        "command": "cocopilot.openEventsStream",
+        "title": "Cocopilot: Open Events Stream"
+      },
+      {
+        "command": "cocopilot.openAgents",
+        "title": "Cocopilot: Open Agents"
+      },
+      {
+        "command": "cocopilot.openLeases",
+        "title": "Cocopilot: Open Leases"
+      },
+      {
+        "command": "cocopilot.openTasksApi",
+        "title": "Cocopilot: Open Tasks API"
+      },
+      {
+        "command": "cocopilot.openTaskDetail",
+        "title": "Cocopilot: Open Task Detail"
+      },
+      {
+        "command": "cocopilot.openRunDetail",
+        "title": "Cocopilot: Open Run Detail"
+      },
+      {
+        "command": "cocopilot.openProjectDetail",
+        "title": "Cocopilot: Open Project Detail"
+      },
+      {
+        "command": "cocopilot.openProjectTree",
+        "title": "Cocopilot: Open Project Tree"
+      },
+      {
+        "command": "cocopilot.openProjectAudit",
+        "title": "Cocopilot: Open Project Audit"
+      },
+      {
+        "command": "cocopilot.openProjectChanges",
+        "title": "Cocopilot: Open Project Changes"
+      },
+      {
+        "command": "cocopilot.openProjectMemory",
+        "title": "Cocopilot: Open Project Memory"
+      },
+      {
+        "command": "cocopilot.openProjectEventsReplay",
+        "title": "Cocopilot: Open Project Events Replay"
+      },
+      {
+        "command": "cocopilot.openPolicies",
+        "title": "Cocopilot: Open Policies"
+      },
+      {
+        "command": "cocopilot.openPolicyDetail",
+        "title": "Cocopilot: Open Policy Detail"
+      },
+      {
+        "command": "cocopilot.listPolicies",
+        "title": "Cocopilot: List Policies"
+      },
+      {
+        "command": "cocopilot.createPolicy",
+        "title": "Cocopilot: Create Policy"
+      },
+      {
+        "command": "cocopilot.updatePolicy",
+        "title": "Cocopilot: Update Policy"
+      },
+      {
+        "command": "cocopilot.togglePolicy",
+        "title": "Cocopilot: Toggle Policy"
+      },
+      {
+        "command": "cocopilot.deletePolicy",
+        "title": "Cocopilot: Delete Policy"
+      },
+      {
+        "command": "cocopilot.createTask",
+        "title": "Cocopilot: Create Task"
+      },
+      {
+        "command": "cocopilot.saveTask",
+        "title": "Cocopilot: Save Task"
+      },
+      {
+        "command": "cocopilot.failTask",
+        "title": "Cocopilot: Fail Task"
+      },
+      {
+        "command": "cocopilot.updateStatus",
+        "title": "Cocopilot: Update Status"
+      },
+      {
+        "command": "cocopilot.updateTask",
+        "title": "Cocopilot: Update Task"
+      },
+      {
+        "command": "cocopilot.deleteTask",
+        "title": "Cocopilot: Delete Task"
+      },
+      {
+        "command": "cocopilot.listTasks",
+        "title": "Cocopilot: List Tasks"
+      },
+      {
+        "command": "cocopilot.claimTask",
+        "title": "Cocopilot: Claim Task"
+      },
+      {
+        "command": "cocopilot.openSettings",
+        "title": "Cocopilot: Open Settings"
+      },
+      {
+        "command": "cocopilot.showQuickStart",
+        "title": "Cocopilot: Quick Start"
+      },
+      {
+        "command": "cocopilot.setProjectId",
+        "title": "Cocopilot: Set Project ID"
+      },
+      {
+        "command": "cocopilot.setApiBase",
+        "title": "Cocopilot: Set API Base"
+      },
+      {
+        "command": "cocopilot.openApiDocs",
+        "title": "Cocopilot: Open API Docs"
+      },
+      {
+        "command": "cocopilot.openOpenApiSpec",
+        "title": "Cocopilot: Open OpenAPI Spec"
+      },
+      {
+        "command": "cocopilot.openApiSummary",
+        "title": "Cocopilot: Open API Summary"
+      },
+      {
+        "command": "cocopilot.openApiDesign",
+        "title": "Cocopilot: Open API Design"
+      },
+      {
+        "command": "cocopilot.openApiCompatibility",
+        "title": "Cocopilot: Open API Compatibility"
+      },
+      {
+        "command": "cocopilot.openApiRoadmap",
+        "title": "Cocopilot: Open API Roadmap"
+      },
+      {
+        "command": "cocopilot.openMigrationsDocs",
+        "title": "Cocopilot: Open Migrations Docs"
+      },
+      {
+        "command": "cocopilot.openRoadmap",
+        "title": "Cocopilot: Open Roadmap"
+      },
+      {
+        "command": "cocopilot.openKbOverview",
+        "title": "Cocopilot: Open KB Overview"
+      },
+      {
+        "command": "cocopilot.openStateDocs",
+        "title": "Cocopilot: Open State Docs"
+      },
+      {
+        "command": "cocopilot.openStateArchitecture",
+        "title": "Cocopilot: Open State Architecture"
+      },
+      {
+        "command": "cocopilot.openStateDecisions",
+        "title": "Cocopilot: Open State Decisions"
+      },
+      {
+        "command": "cocopilot.openStateCurrent",
+        "title": "Cocopilot: Open State Current"
+      },
+      {
+        "command": "cocopilot.openStateNext",
+        "title": "Cocopilot: Open State Next"
+      },
+      {
+        "command": "cocopilot.openStateRisks",
+        "title": "Cocopilot: Open State Risks"
+      },
+      {
+        "command": "cocopilot.openMcpReadme",
+        "title": "Cocopilot: Open MCP README"
+      },
+      {
+        "command": "cocopilot.openMcpTools",
+        "title": "Cocopilot: Open MCP Tools"
+      },
+      {
+        "command": "cocopilot.showLogs",
+        "title": "Cocopilot: Show Logs"
+      },
+      {
+        "command": "cocopilot.startServer",
+        "title": "Cocopilot: Start Server"
+      },
+      {
+        "command": "cocopilot.stopServer",
+        "title": "Cocopilot: Stop Server"
+      },
+      {
+        "command": "cocopilot.showTasks",
+        "title": "Cocopilot: Show Tasks"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "cocopilot.openApiDocs"
+        },
+        {
+          "command": "cocopilot.openOpenApiSpec"
+        },
+        {
+          "command": "cocopilot.openApiRoadmap"
+        },
+        {
+          "command": "cocopilot.openMigrationsDocs"
+        },
+        {
+          "command": "cocopilot.openRoadmap"
+        },
+        {
+          "command": "cocopilot.openKbOverview"
+        },
+        {
+          "command": "cocopilot.openHealth"
+        },
+        {
+          "command": "cocopilot.openConfig"
+        },
+        {
+          "command": "cocopilot.openVersion"
+        },
+        {
+          "command": "cocopilot.openEvents"
+        },
+        {
+          "command": "cocopilot.openAgents"
+        },
+        {
+          "command": "cocopilot.openLeases"
+        },
+        {
+          "command": "cocopilot.openTaskDetail"
+        },
+        {
+          "command": "cocopilot.openRunDetail"
+        },
+        {
+          "command": "cocopilot.openProjectDetail"
+        },
+        {
+          "command": "cocopilot.openProjectTree"
+        },
+        {
+          "command": "cocopilot.openProjectAudit"
+        },
+        {
+          "command": "cocopilot.openProjectChanges"
+        },
+        {
+          "command": "cocopilot.openProjectMemory"
+        },
+        {
+          "command": "cocopilot.openProjectEventsReplay"
+        },
+        {
+          "command": "cocopilot.openPolicies"
+        },
+        {
+          "command": "cocopilot.openPolicyDetail"
+        },
+        {
+          "command": "cocopilot.listPolicies"
+        },
+        {
+          "command": "cocopilot.createPolicy"
+        },
+        {
+          "command": "cocopilot.updatePolicy"
+        },
+        {
+          "command": "cocopilot.togglePolicy"
+        },
+        {
+          "command": "cocopilot.deletePolicy"
+        },
+        {
+          "command": "cocopilot.createTask"
+        },
+        {
+          "command": "cocopilot.saveTask"
+        },
+        {
+          "command": "cocopilot.updateStatus"
+        },
+        {
+          "command": "cocopilot.updateTask"
+        },
+        {
+          "command": "cocopilot.deleteTask"
+        },
+        {
+          "command": "cocopilot.listTasks"
+        },
+        {
+          "command": "cocopilot.claimTask"
+        },
+        {
+          "command": "cocopilot.openStateDocs"
+        },
+        {
+          "command": "cocopilot.openStateCurrent"
+        },
+        {
+          "command": "cocopilot.openStateNext"
+        },
+        {
+          "command": "cocopilot.openApiCompatibility"
+        },
+        {
+          "command": "cocopilot.openMcpReadme"
+        },
+        {
+          "command": "cocopilot.openMcpTools"
+        },
+        {
+          "command": "cocopilot.showLogs"
+        },
+        {
+          "command": "cocopilot.startServer"
+        },
+        {
+          "command": "cocopilot.stopServer"
+        },
+        {
+          "command": "cocopilot.showTasks"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Cocopilot",
+      "properties": {
+        "cocopilot.apiBase": {
+          "type": "string",
+          "default": "http://localhost:8080",
+          "description": "Base URL for the Cocopilot API and dashboard."
+        },
+        "cocopilot.projectId": {
+          "type": "string",
+          "default": "",
+          "description": "Project ID for Cocopilot."
+        },
+        "cocopilot.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Optional API key for authenticating with the Cocopilot server."
+        },
+        "cocopilot.autoStartMcpServer": {
+          "type": "boolean",
+          "default": false,
+          "description": "Start the MCP server automatically when the VSIX activates."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -p ./ -w",
+    "package": "vsce package -o dist/cocopilot-vsix.vsix",
+    "release:vsix": "npm run compile && npm run package"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.3",
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.4.0"
+  }
+}

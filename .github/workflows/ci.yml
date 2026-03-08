@@ -1,0 +1,134 @@
+name: CI
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test -race -count=1 ./...
+
+  node-mcp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: 'npm', cache-dependency-path: 'tools/cocopilot-mcp/package-lock.json' }
+      - run: npm ci
+        working-directory: tools/cocopilot-mcp
+      - run: npm run build
+        working-directory: tools/cocopilot-mcp
+
+  node-vsix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: 'npm', cache-dependency-path: 'tools/cocopilot-vsix/package-lock.json' }
+      - run: npm ci
+        working-directory: tools/cocopilot-vsix
+      - run: npm run compile
+        working-directory: tools/cocopilot-vsix
+      - run: npx @vscode/vsce package -o dist/cocopilot-vsix.vsix
+        working-directory: tools/cocopilot-vsix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cocopilot-vsix
+          path: tools/cocopilot-vsix/dist/cocopilot-vsix.vsix
+
+  artifact-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for forbidden artifacts
+        run: |
+          failed=0
+          if find . -name "*.db" -o -name "*.db-wal" -o -name "*.db-shm" | grep -v "^./.git" | grep -q .; then
+            echo "ERROR: Runtime DB artifacts found in repo"
+            failed=1
+          fi
+          if find . -name ".DS_Store" | grep -v "^./.git" | grep -q .; then
+            echo "ERROR: .DS_Store files found in repo"
+            failed=1
+          fi
+          if find . -type d -name "__MACOSX" | grep -v "^./.git" | grep -q .; then
+            echo "ERROR: __MACOSX directories found in repo"
+            failed=1
+          fi
+          if find . -name "coverage.out" | grep -v "^./.git" | grep -q .; then
+            echo "ERROR: coverage.out files found in repo"
+            failed=1
+          fi
+          if find . -name "*.zip" | grep -v "^./.git" | grep -v node_modules | grep -q .; then
+            echo "ERROR: Archive files (*.zip) found in repo"
+            failed=1
+          fi
+          exit $failed
+
+  release-zip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build release zip
+        run: bash scripts/package.sh
+      - name: Validate release zip contents
+        run: |
+          VERIFY_DIR=$(mktemp -d)
+          unzip -q dist/cocopilot-release.zip -d "$VERIFY_DIR"
+          failed=0
+          if find "$VERIFY_DIR" -type d -name ".git" | grep -q .; then
+            echo "ERROR: .git/ directory found in release zip"
+            failed=1
+          fi
+          if find "$VERIFY_DIR" -type d -name "__MACOSX" | grep -q .; then
+            echo "ERROR: __MACOSX/ directory found in release zip"
+            failed=1
+          fi
+          if find "$VERIFY_DIR" -name ".DS_Store" | grep -q .; then
+            echo "ERROR: .DS_Store found in release zip"
+            failed=1
+          fi
+          if find "$VERIFY_DIR" -name "tasks.db*" | grep -q .; then
+            echo "ERROR: tasks.db artifacts found in release zip"
+            failed=1
+          fi
+          if find "$VERIFY_DIR" -name "coverage.out" | grep -q .; then
+            echo "ERROR: coverage.out found in release zip"
+            failed=1
+          fi
+          rm -rf "$VERIFY_DIR"
+          exit $failed
+
+  contract-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check API contract drift
+        run: bash tools/check-contract-drift.sh
+
+  codegen-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Run codegen and check for drift
+        run: |
+          go run tools/codegen/codegen.go
+          if ! git diff --exit-code tools/shared/types.generated.ts tools/shared/client.generated.ts; then
+            echo "ERROR: Generated files are out of date. Run 'go run tools/codegen/codegen.go' and commit."
+            exit 1
+          fi

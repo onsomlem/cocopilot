@@ -4,7 +4,10 @@
 *.dll
 *.so
 *.dylib
+cocopilot
 task-queue
+task-server
+theinf-loop
 
 # Test binary
 *.test
@@ -18,6 +21,7 @@ go.work.sum
 
 # Dependency directories
 vendor/
+node_modules/
 
 # IDE
 .idea/
@@ -29,13 +33,36 @@ vendor/
 # OS files
 .DS_Store
 Thumbs.db
+__MACOSX/
+
+# Archives / release pollution
+*.zip
 
 # Database
 *.db
+*.db-shm
+*.db-wal
+
+# Temp directory
+tmp/
 
 # Environment
 .env
 .env.*
+
+# Secrets and keys
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*_rsa
+*_ecdsa
+*_ed25519
+*.secret
+credentials.json
+service-account*.json
 
 # Build output
 /bin/

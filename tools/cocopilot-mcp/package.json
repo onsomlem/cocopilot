@@ -1,0 +1,30 @@
+{
+  "name": "cocopilot-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Cocopilot - an agentic task queue for orchestrating LLM agents",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "cocopilot-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist/",
+    "tools.json",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "validate:tools": "node scripts/validate-tools-json.mjs",
+    "release:check": "npm run build && npm run validate:tools"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}

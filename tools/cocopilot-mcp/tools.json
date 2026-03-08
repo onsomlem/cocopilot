@@ -1,0 +1,633 @@
+{
+  "tools": [
+    {
+      "name": "coco.project.list",
+      "description": "List projects from the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": { "type": "integer" },
+          "offset": { "type": "integer" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.project.create",
+      "description": "Create a project in the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "status": { "type": "string" }
+        },
+        "required": ["name"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.project.update",
+      "description": "Update a project in the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "status": { "type": "string" }
+        },
+        "required": ["project_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.project.get",
+      "description": "Fetch a project from the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" }
+        },
+        "required": ["project_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.project.delete",
+      "description": "Delete a project from the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" }
+        },
+        "required": ["project_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.config.get",
+      "description": "Fetch server configuration from the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.version.get",
+      "description": "Fetch server version info from the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.health.get",
+      "description": "Fetch server health info from the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.agent.list",
+      "description": "List agents from the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "since": { "type": "string" },
+          "limit": { "type": "integer" },
+          "offset": { "type": "integer" },
+          "sort": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.agent.get",
+      "description": "Fetch agent details from the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "agent_id": { "type": "string" }
+        },
+        "required": ["agent_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.agent.delete",
+      "description": "Delete an agent from the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "agent_id": { "type": "string" }
+        },
+        "required": ["agent_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.project.tasks.list",
+      "description": "List tasks for a project from the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" },
+          "status": { "type": "string" },
+          "type": { "type": "string" },
+          "tag": { "type": "string" },
+          "q": { "type": "string" },
+          "limit": { "type": "integer" },
+          "offset": { "type": "integer" }
+        },
+        "required": ["project_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.project.memory.query",
+      "description": "Query project memory from the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" },
+          "scope": { "type": "string" },
+          "key": { "type": "string" },
+          "q": { "type": "string" }
+        },
+        "required": ["project_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.project.memory.put",
+      "description": "Store a project memory item in the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" },
+          "scope": { "type": "string" },
+          "key": { "type": "string" },
+          "value": { "type": "object", "additionalProperties": true },
+          "tags": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["project_id", "scope", "key", "value"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.project.audit.list",
+      "description": "List audit events for a project from the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" },
+          "type": { "type": "string" },
+          "since": { "type": "string" },
+          "limit": { "type": "integer" },
+          "offset": { "type": "integer" }
+        },
+        "required": ["project_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.policy.list",
+      "description": "List policies for a project from the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" },
+          "enabled": { "type": "boolean" },
+          "limit": { "type": "integer" },
+          "offset": { "type": "integer" },
+          "sort": { "type": "string" }
+        },
+        "required": ["project_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.policy.get",
+      "description": "Fetch a policy in a project from the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" },
+          "policy_id": { "type": "string" }
+        },
+        "required": ["project_id", "policy_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.policy.create",
+      "description": "Create a policy in a project from the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "rules": { "type": "array", "items": { "type": "object" } },
+          "enabled": { "type": "boolean" }
+        },
+        "required": ["project_id", "name"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.policy.update",
+      "description": "Update a policy in a project from the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" },
+          "policy_id": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "rules": { "type": "array", "items": { "type": "object" } },
+          "enabled": { "type": "boolean" }
+        },
+        "required": ["project_id", "policy_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.policy.delete",
+      "description": "Delete a policy in a project from the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" },
+          "policy_id": { "type": "string" }
+        },
+        "required": ["project_id", "policy_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.project.events.replay",
+      "description": "Replay project events since a given event id.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" },
+          "since_id": { "type": "string" },
+          "limit": { "type": "integer" }
+        },
+        "required": ["project_id", "since_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.project.automation.rules",
+      "description": "List automation rules for a project.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" }
+        },
+        "required": ["project_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.project.automation.simulate",
+      "description": "Simulate automation for a project event.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" },
+          "event": {
+            "type": "object",
+            "properties": {
+              "kind": { "type": "string" },
+              "entity_id": { "type": "string" },
+              "payload": { "type": "object", "additionalProperties": true }
+            },
+            "required": ["kind"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["project_id", "event"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.project.automation.replay",
+      "description": "Replay automation for task.completed events since an event id.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" },
+          "since_event_id": { "type": "string" },
+          "limit": { "type": "integer" }
+        },
+        "required": ["project_id", "since_event_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.context_pack.create",
+      "description": "Create a context pack for a task in a project.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" },
+          "task_id": { "type": ["integer", "string"] },
+          "query": { "type": "string" },
+          "budget": {
+            "type": "object",
+            "properties": {
+              "max_files": { "type": "integer" },
+              "max_bytes": { "type": "integer" },
+              "max_snippets": { "type": "integer" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": ["project_id", "task_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.context_pack.get",
+      "description": "Fetch a context pack by id from the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "pack_id": { "type": ["integer", "string"] }
+        },
+        "required": ["pack_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.task.create",
+      "description": "Create a task in the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "instructions": { "type": "string" },
+          "title": { "type": "string" },
+          "project_id": { "type": "string" },
+          "type": { "type": "string" },
+          "priority": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "parent_task_id": { "type": "integer" }
+        },
+        "required": ["instructions"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.task.list",
+      "description": "List tasks from the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" },
+          "status": { "type": "string" },
+          "limit": { "type": "integer" },
+          "offset": { "type": "integer" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.task.complete",
+      "description": "Complete a task in the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": { "type": ["integer", "string"] },
+          "status": { "type": "string" },
+          "output": { "type": "string" },
+          "message": { "type": "string" },
+          "result": { "type": "object", "additionalProperties": true }
+        },
+        "required": ["task_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.task.update",
+      "description": "Update task fields in the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": { "type": ["integer", "string"] },
+          "instructions": { "type": "string" },
+          "status": { "type": "string" },
+          "project_id": { "type": "string" },
+          "parent_task_id": { "type": "integer" }
+        },
+        "required": ["task_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.task.delete",
+      "description": "Delete a task in the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": { "type": ["integer", "string"] }
+        },
+        "required": ["task_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.task.dependencies.list",
+      "description": "List task dependencies in the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": { "type": ["integer", "string"] }
+        },
+        "required": ["task_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.task.dependencies.create",
+      "description": "Create a task dependency in the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": { "type": ["integer", "string"] },
+          "depends_on_task_id": { "type": ["integer", "string"] }
+        },
+        "required": ["task_id", "depends_on_task_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.task.dependencies.delete",
+      "description": "Delete a task dependency in the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": { "type": ["integer", "string"] },
+          "depends_on_task_id": { "type": ["integer", "string"] }
+        },
+        "required": ["task_id", "depends_on_task_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.lease.create",
+      "description": "Create a lease for a task claim in the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": { "type": ["integer", "string"] },
+          "agent_id": { "type": "string" },
+          "mode": { "type": "string" }
+        },
+        "required": ["task_id", "agent_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.lease.heartbeat",
+      "description": "Renew a lease in the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "lease_id": { "type": "string" }
+        },
+        "required": ["lease_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.lease.release",
+      "description": "Release a lease in the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "lease_id": { "type": "string" },
+          "reason": { "type": "string" }
+        },
+        "required": ["lease_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.events.list",
+      "description": "List events from the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string" },
+          "since": { "type": "string" },
+          "task_id": { "type": ["integer", "string"] },
+          "project_id": { "type": "string" },
+          "limit": { "type": "integer" },
+          "offset": { "type": "integer" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.run.get",
+      "description": "Fetch run details from the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "run_id": { "type": "string" }
+        },
+        "required": ["run_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.run.steps",
+      "description": "Append a run step to the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "run_id": { "type": "string" },
+          "name": { "type": "string" },
+          "status": { "type": "string" },
+          "details": { "type": "object", "additionalProperties": true }
+        },
+        "required": ["run_id", "name", "status"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.run.logs",
+      "description": "Append a run log entry to the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "run_id": { "type": "string" },
+          "stream": { "type": "string" },
+          "chunk": { "type": "string" },
+          "ts": { "type": "string" }
+        },
+        "required": ["run_id", "stream", "chunk"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.run.artifacts",
+      "description": "Append a run artifact to the Cocopilot API.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "run_id": { "type": "string" },
+          "name": { "type": "string" },
+          "kind": { "type": "string" },
+          "uri": { "type": "string" },
+          "metadata": { "type": "object", "additionalProperties": true }
+        },
+        "required": ["run_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.task.claim",
+      "description": "Claim the next task from the Cocopilot API (v1 GET /task).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.task.claim.v2",
+      "description": "Claim a task by id from the Cocopilot API (v2 POST /api/v2/tasks/{taskId}/claim).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": { "type": ["integer", "string"] }
+        },
+        "required": ["task_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coco.task.save",
+      "description": "Save task output to the Cocopilot API (v1 POST /save).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": { "type": ["integer", "string"] },
+          "message": { "type": "string" }
+        },
+        "required": ["task_id", "message"],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

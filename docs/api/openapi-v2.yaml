@@ -1,0 +1,4809 @@
+openapi: 3.0.3
+info:
+  title: Cocopilot API v2
+  version: 2.0.0
+  description: |
+    Next-generation API for Cocopilot orchestration system.
+    
+    **Key Features:**
+    - Multi-project support
+    - Execution ledger (runs, steps, artifacts)
+    - Lease-based task claiming
+    - Structured completion with metadata
+    - Event streaming per project
+    - Memory persistence
+    - Context pack generation
+    - Policy management and enforcement
+    - Project audit trail
+    
+    **Compatibility:**
+    - v1 endpoints remain stable at root level (/task, /create, /save, etc.)
+    - All v2 endpoints are under /api/v2/*
+    
+    **Runtime Status:**
+    - Endpoints marked with `x-runtime-status: planned` are design targets and are not yet implemented in the running server.
+    - Endpoints without that marker reflect current runtime behavior.
+    - API-key auth is runtime-configurable for v2 endpoints via `X-API-Key`.
+
+  contact:
+    name: Cocopilot Team
+
+servers:
+  - url: http://127.0.0.1:8080
+    description: Local development server
+
+tags:
+  - name: v1-compat
+    description: Legacy v1 endpoints (maintained for backward compatibility)
+  - name: health
+    description: Health and version checks
+  - name: projects
+    description: Project management
+  - name: agents
+    description: Agent registration and heartbeat
+  - name: tasks
+      responses:
+        '200':
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  projects:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Project'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: INVALID_ARGUMENT
+                  message: name and workdir are required
+        '403':
+          description: Insufficient scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Insufficient scope
+                  details:
+                    required_scope: projects:write
+              example:
+                error:
+                  code: INVALID_ARGUMENT
+                  message: Agent name is required
+  - name: leases
+    description: Task claiming and agent coordination
+  - name: runs
+    description: Execution tracking and ledger
+  - name: events
+    description: Server-Sent Events (SSE) for real-time updates
+  - name: audit
+    description: Project audit trail and compliance events
+  - name: memory
+    description: Persistent memory and knowledge base
+  - name: policies
+    description: Project policy management
+  - name: automation
+    description: Automation rules and execution
+  - name: context
+    description: Context pack generation for tasks
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        Runtime-configurable v2 auth key.
+        - Required for v2 mutating endpoints when `COCO_REQUIRE_API_KEY=true`
+        - Also required for v2 read endpoints when `COCO_REQUIRE_API_KEY_READS=true`
+        - Scoped identities can be configured via `COCO_API_IDENTITIES` using:
+          `id|type|api_key|scope1,scope2;...`
+  schemas:
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              enum:
+                - INVALID_ARGUMENT
+                - INVALID_JSON
+                - NOT_FOUND
+                - CONFLICT
+                - UNAUTHORIZED
+                - FORBIDDEN
+                - METHOD_NOT_ALLOWED
+                - GONE
+                - UNAVAILABLE
+                - INTERNAL
+              description: Machine-readable error code
+            message:
+              type: string
+              description: Human-readable error message
+            details:
+              type: object
+              additionalProperties: true
+              description: Additional error context
+      example:
+        error:
+          code: METHOD_NOT_ALLOWED
+          message: Method not allowed
+          details:
+            method: POST
+            allowed_methods:
+              - GET
+
+    RuntimeConfig:
+      type: object
+      required:
+        - db_path
+        - auth
+        - retention
+        - sse
+      properties:
+        db_path:
+          type: string
+          example: "[redacted]"
+        auth:
+          $ref: '#/components/schemas/RuntimeConfigAuth'
+        retention:
+          $ref: '#/components/schemas/RuntimeConfigRetention'
+        sse:
+          $ref: '#/components/schemas/RuntimeConfigSSE'
+
+    RuntimeConfigAuth:
+      type: object
+      required:
+        - required
+        - require_reads
+        - identity_count
+        - legacy_api_key_set
+      properties:
+        required:
+          type: boolean
+          example: true
+        require_reads:
+          type: boolean
+          example: false
+        identity_count:
+          type: integer
+          example: 1
+        legacy_api_key_set:
+          type: boolean
+          example: false
+
+    RuntimeConfigRetention:
+      type: object
+      required:
+        - enabled
+        - interval_seconds
+        - max_rows
+        - days
+      properties:
+        enabled:
+          type: boolean
+          example: true
+        interval_seconds:
+          type: integer
+          example: 3600
+        max_rows:
+          type: integer
+          example: 0
+        days:
+          type: integer
+          example: 30
+
+    RuntimeConfigSSE:
+      type: object
+      required:
+        - heartbeat_seconds
+        - replay_limit_max
+      properties:
+        heartbeat_seconds:
+          type: integer
+          example: 30
+        replay_limit_max:
+          type: integer
+          example: 500
+
+    Project:
+      type: object
+      required:
+        - id
+        - name
+        - workdir
+        - created_at
+      properties:
+        id:
+          type: string
+          example: proj_default
+          description: Unique project identifier
+        name:
+          type: string
+          example: Default
+          description: Human-readable project name
+        workdir:
+          type: string
+          example: /home/user/project
+          description: Working directory for the project
+        settings:
+          type: object
+          additionalProperties: true
+          description: Project-specific settings
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-02-11T10:30:00.000Z"
+
+    ProjectCreateRequest:
+      type: object
+      required:
+        - name
+        - workdir
+      properties:
+        name:
+          type: string
+          example: My Project
+          minLength: 1
+        workdir:
+          type: string
+          minLength: 1
+          example: /home/user/my-project
+        settings:
+          type: object
+          additionalProperties: true
+
+    ProjectUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        workdir:
+          type: string
+          minLength: 1
+        settings:
+          type: object
+          additionalProperties: true
+
+    Task:
+      type: object
+      required:
+        - id
+        - project_id
+        - instructions
+        - status_v1
+        - status_v2
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+          example: 123
+          description: Unique task identifier (v1 compatible)
+        project_id:
+          type: string
+          example: proj_default
+        title:
+          type: string
+          example: Implement login feature
+        instructions:
+          type: string
+          description: Task instructions for the agent
+        type:
+          type: string
+          enum:
+            - ANALYZE
+            - MODIFY
+            - TEST
+            - REVIEW
+            - DOC
+            - RELEASE
+            - ROLLBACK
+          example: MODIFY
+        priority:
+          type: integer
+          default: 0
+          example: 5
+        tags:
+          type: array
+          items:
+            type: string
+          example: ["backend", "auth"]
+        status_v1:
+          type: string
+          enum:
+            - NOT_PICKED
+            - IN_PROGRESS
+            - COMPLETE
+          description: v1 status for compatibility
+        status_v2:
+          type: string
+          enum:
+            - QUEUED
+            - CLAIMED
+            - RUNNING
+            - SUCCEEDED
+            - FAILED
+            - NEEDS_REVIEW
+            - CANCELLED
+          description: v2 detailed status
+        parent_task_id:
+          type: integer
+          nullable: true
+          description: Parent task ID if this is a subtask
+        output:
+          type: string
+          nullable: true
+          description: v1 compatible output field
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TaskCreateRequest:
+      type: object
+      required:
+        - instructions
+      properties:
+        project_id:
+          type: string
+        title:
+          type: string
+        instructions:
+          type: string
+        type:
+          type: string
+          enum: [ANALYZE, MODIFY, TEST, REVIEW, DOC, RELEASE, ROLLBACK]
+          default: MODIFY
+        priority:
+          type: integer
+          default: 0
+        tags:
+          type: array
+          items:
+            type: string
+        parent_task_id:
+          type: integer
+
+    TaskUpdateRequest:
+      type: object
+      properties:
+        instructions:
+          type: string
+        status:
+          type: string
+          description: Accepts v1 or v2 status values (e.g. IN_PROGRESS or RUNNING)
+        project_id:
+          type: string
+        parent_task_id:
+          type: integer
+
+    TaskWithRun:
+      allOf:
+        - $ref: '#/components/schemas/Task'
+        - type: object
+          properties:
+            latest_run:
+              $ref: '#/components/schemas/RunSummary'
+
+    TaskDetail:
+      type: object
+      required:
+        - task
+      properties:
+        task:
+          $ref: '#/components/schemas/Task'
+        parent_chain:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+        latest_run:
+          $ref: '#/components/schemas/RunSummary'
+
+    TaskDependency:
+      type: object
+      required:
+        - task_id
+        - depends_on_task_id
+      properties:
+        task_id:
+          type: integer
+          example: 123
+        depends_on_task_id:
+          type: integer
+          example: 45
+
+    TaskDependencyCreateRequest:
+      type: object
+      required:
+        - depends_on_task_id
+      properties:
+        depends_on_task_id:
+          type: integer
+          example: 45
+
+    TaskDependencyList:
+      type: object
+      required:
+        - dependencies
+      properties:
+        dependencies:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskDependency'
+
+    RunSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          example: run_abc123
+        status:
+          type: string
+          enum: [RUNNING, SUCCEEDED, FAILED, CANCELLED]
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+
+    Run:
+      type: object
+      required:
+        - id
+        - task_id
+        - status
+        - started_at
+      properties:
+        id:
+          type: string
+          example: run_abc123
+        task_id:
+          type: integer
+          example: 123
+        agent_id:
+          type: string
+          example: agent_xyz
+        status:
+          type: string
+          enum: [RUNNING, SUCCEEDED, FAILED, CANCELLED]
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+        error:
+          type: string
+          description: Error message if failed
+
+    RunDetail:
+      allOf:
+        - $ref: '#/components/schemas/Run'
+        - type: object
+          properties:
+            steps:
+              type: array
+              items:
+                $ref: '#/components/schemas/RunStep'
+            logs:
+              type: array
+              items:
+                $ref: '#/components/schemas/RunLog'
+            artifacts:
+              type: array
+              items:
+                $ref: '#/components/schemas/Artifact'
+            tool_invocations:
+              type: array
+              items:
+                $ref: '#/components/schemas/ToolInvocation'
+
+    RunStep:
+      type: object
+      required:
+        - id
+        - name
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          example: step_123
+        name:
+          type: string
+          example: Analyze code
+        status:
+          type: string
+          enum: [STARTED, SUCCEEDED, FAILED]
+        details:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+
+    RunStepCreate:
+      type: object
+      required:
+        - name
+        - status
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+          enum: [STARTED, SUCCEEDED, FAILED]
+        details:
+          type: object
+          additionalProperties: true
+
+    Artifact:
+      type: object
+      required:
+        - id
+        - kind
+        - storage_ref
+        - created_at
+      properties:
+        id:
+          type: string
+          example: artifact_abc
+        kind:
+          type: string
+          enum: [diff, patch, log, report, file]
+        storage_ref:
+          type: string
+          description: Storage location reference
+        sha256:
+          type: string
+        size:
+          type: integer
+          description: Size in bytes
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+
+    ArtifactCreate:
+      type: object
+      required:
+        - kind
+        - storage_ref
+        - size
+      properties:
+        kind:
+          type: string
+          enum: [diff, patch, log, report, file]
+        storage_ref:
+          type: string
+        sha256:
+          type: string
+        size:
+          type: integer
+        metadata:
+          type: object
+          additionalProperties: true
+
+    ToolInvocation:
+      type: object
+      properties:
+        id:
+          type: string
+        tool_name:
+          type: string
+        input:
+          type: object
+          additionalProperties: true
+        output:
+          type: object
+          additionalProperties: true
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+
+    Lease:
+      type: object
+      required:
+        - id
+        - task_id
+        - agent_id
+        - expires_at
+      properties:
+        id:
+          type: string
+          example: lease_xyz
+        task_id:
+          type: integer
+          example: 123
+        agent_id:
+          type: string
+          example: agent_xyz
+        mode:
+          type: string
+          enum: [exclusive, shared]
+          default: exclusive
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    LeaseCreateRequest:
+      type: object
+      required:
+        - task_id
+        - agent_id
+      properties:
+        task_id:
+          type: integer
+          example: 123
+        agent_id:
+          type: string
+          example: agent_xyz
+        mode:
+          type: string
+          enum: [exclusive]
+          default: exclusive
+
+    LeaseReleaseResponse:
+      type: object
+      required:
+        - lease_id
+        - released
+      properties:
+        lease_id:
+          type: string
+          example: lease_xyz
+        released:
+          type: boolean
+          example: true
+
+    Agent:
+      type: object
+      required:
+        - id
+        - name
+        - status
+        - registered_at
+      properties:
+        id:
+          type: string
+          example: agent_abc123
+        name:
+          type: string
+          example: Worker Agent
+        capabilities:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        status:
+          type: string
+          enum: [ONLINE, OFFLINE, BUSY, IDLE]
+        last_seen:
+          type: string
+          format: date-time
+        registered_at:
+          type: string
+          format: date-time
+
+    AgentRegisterRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+          additionalProperties: true
+
+    RunEnvelope:
+      type: object
+      required:
+        - run
+      properties:
+        run:
+          $ref: '#/components/schemas/RunDetail'
+
+    ClaimRequest:
+      type: object
+      required:
+        - agent_id
+      properties:
+        agent_id:
+          type: string
+        mode:
+          type: string
+          enum: [exclusive]
+          default: exclusive
+
+    ClaimResponse:
+      type: object
+      required:
+        - lease
+        - task
+      properties:
+        lease:
+          $ref: '#/components/schemas/Lease'
+        task:
+          $ref: '#/components/schemas/Task'
+
+    CompleteRequest:
+      type: object
+      description: Optional completion payload for v1-compatible output.
+      properties:
+        output:
+          type: string
+          description: Plain-text output saved to the task.
+        message:
+          type: string
+          description: Alias for output.
+        run_id:
+          type: string
+          description: Optional run identifier for completion metadata.
+        status:
+          type: string
+          description: Optional completion status for v2 metadata.
+          enum: [SUCCEEDED, FAILED, NEEDS_REVIEW]
+        result:
+          $ref: '#/components/schemas/CompletionResult'
+
+    CompletionResult:
+      type: object
+      description: Required fields vary by task type. MODIFY requires changes_made and files_touched; TEST requires tests_run; DOC requires summary; REVIEW requires summary and risks.
+      properties:
+        summary:
+          type: string
+        changes_made:
+          type: array
+          items:
+            type: string
+        files_touched:
+          type: array
+          items:
+            type: string
+        commands_run:
+          type: array
+          items:
+            type: string
+        tests_run:
+          type: array
+          items:
+            type: string
+        risks:
+          type: array
+          items:
+            type: string
+        next_tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/NextTaskInput'
+
+    NextTaskInput:
+      type: object
+      required:
+        - title
+        - instructions
+        - type
+        - priority
+      properties:
+        title:
+          type: string
+        instructions:
+          type: string
+        type:
+          type: string
+          enum: [ANALYZE, MODIFY, TEST, REVIEW, DOC, RELEASE, ROLLBACK]
+        priority:
+          type: integer
+        tags:
+          type: array
+          items:
+            type: string
+
+    LogEntry:
+      type: object
+      required:
+        - stream
+        - chunk
+      properties:
+        stream:
+          type: string
+          enum: [stdout, stderr, info]
+        chunk:
+          type: string
+        ts:
+          type: string
+          format: date-time
+
+    RunLog:
+      type: object
+      required:
+        - id
+        - run_id
+        - stream
+        - chunk
+        - ts
+      properties:
+        id:
+          type: integer
+        run_id:
+          type: string
+        stream:
+          type: string
+          enum: [stdout, stderr, info]
+        chunk:
+          type: string
+        ts:
+          type: string
+          format: date-time
+
+    Policy:
+      type: object
+      required:
+        - id
+        - project_id
+        - name
+        - rules
+        - enabled
+        - created_at
+      properties:
+        id:
+          type: string
+          example: pol_abc
+        project_id:
+          type: string
+          example: proj_default
+        name:
+          type: string
+        description:
+          type: string
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyRule'
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+      example:
+        id: pol_abc
+        project_id: proj_default
+        name: Default Policy
+        description: Enforce task audit
+        rules:
+          - type: automation.block
+            reason: No automated followups
+        enabled: true
+        created_at: 2026-02-11T12:00:00Z
+
+    PolicyRule:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum: [automation.block]
+        reason:
+          type: string
+      additionalProperties: true
+      example:
+        type: automation.block
+        reason: No automated followups
+
+    PolicyCreateRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyRule'
+        enabled:
+          type: boolean
+          default: true
+      example:
+        name: Default Policy
+        description: Enforce task audit
+        rules:
+          - type: automation.block
+            reason: No automated followups
+        enabled: true
+
+    PolicyUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyRule'
+        enabled:
+          type: boolean
+      example:
+        name: Updated Policy
+        description: Updated policy description
+        rules:
+          - type: automation.block
+            reason: No automated followups
+        enabled: false
+
+    MemoryItem:
+      type: object
+      required:
+        - id
+        - scope
+        - key
+        - value
+        - updated_at
+      properties:
+        id:
+          type: string
+          example: mem_abc
+        scope:
+          type: string
+          enum: [GLOBAL, MODULE, FILE, TASK, RUN]
+        key:
+          type: string
+        value:
+          type: object
+          additionalProperties: true
+        source_refs:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                enum: [task, run, file]
+              id:
+                anyOf:
+                  - type: integer
+                  - type: string
+              path:
+                type: string
+              ref:
+                type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      example:
+        id: mem_abc
+        scope: TASK
+        key: context_pack.notes
+        value:
+          notes: Investigate context pack defaults.
+          confidence: 0.72
+        source_refs:
+          - type: task
+            id: 123
+          - type: file
+            path: docs/api/openapi-v2.yaml
+            ref: L780-L920
+        created_at: 2026-02-11T12:34:56Z
+        updated_at: 2026-02-11T13:05:02Z
+
+    MemoryPutRequest:
+      type: object
+      required:
+        - scope
+        - key
+        - value
+      properties:
+        scope:
+          type: string
+          enum: [GLOBAL, MODULE, FILE, TASK, RUN]
+        key:
+          type: string
+        value:
+          type: object
+          additionalProperties: true
+        source_refs:
+          type: array
+          items:
+            type: object
+      example:
+        scope: TASK
+        key: context_pack.notes
+        value:
+          notes: Investigate context pack defaults.
+          confidence: 0.72
+        source_refs:
+          - type: task
+            id: 123
+
+    ContextPack:
+      type: object
+      required:
+        - id
+        - task_id
+        - summary
+        - contents
+      properties:
+        id:
+          type: string
+          example: pack_abc
+        task_id:
+          type: integer
+        summary:
+          type: string
+        contents:
+          type: object
+          properties:
+            files:
+              type: array
+              items:
+                type: object
+                properties:
+                  path:
+                    type: string
+                  snippets:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        start:
+                          type: integer
+                        end:
+                          type: integer
+                        text:
+                          type: string
+            related_tasks:
+              type: array
+              items:
+                type: integer
+            decisions:
+              type: array
+              items:
+                type: string
+            repo_state:
+              type: object
+              properties:
+                git_head:
+                  type: string
+                dirty:
+                  type: boolean
+      example:
+        id: pack_abc
+        task_id: 123
+        summary: Focus on memory and context pack schemas for tooling visibility.
+        contents:
+          files:
+            - path: docs/api/openapi-v2.yaml
+              snippets:
+                - start: 780
+                  end: 920
+                  text: "MemoryItem and ContextPack schemas with examples."
+          related_tasks:
+            - 118
+            - 120
+          decisions:
+            - Add schema-level examples for MemoryItem and ContextPack.
+          repo_state:
+            git_head: 1a2b3c4d
+            dirty: true
+
+    ContextPackCreateRequest:
+      type: object
+      required:
+        - task_id
+      properties:
+        task_id:
+          type: integer
+        query:
+          type: string
+        budget:
+          type: object
+          properties:
+            max_files:
+              type: integer
+              default: 25
+            max_bytes:
+              type: integer
+              default: 500000
+            max_snippets:
+              type: integer
+              default: 200
+      example:
+        task_id: 123
+        query: memory and context packs endpoints
+        budget:
+          max_files: 10
+          max_bytes: 120000
+          max_snippets: 40
+
+    Event:
+      type: object
+      required:
+        - id
+        - project_id
+        - kind
+        - entity_type
+        - entity_id
+        - created_at
+      properties:
+        id:
+          type: string
+          example: event_abc
+        project_id:
+          type: string
+          example: proj_default
+        kind:
+          type: string
+          enum:
+            - task.created
+            - task.updated
+            - task.deleted
+            - run.started
+            - run.updated
+            - run.completed
+            - lease.created
+            - lease.expired
+            - policy.created
+            - policy.updated
+            - policy.deleted
+            - memory.updated
+            - repo.file_changed
+        entity_type:
+          type: string
+          enum: [task, run, lease, policy, memory, repo_file]
+        entity_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        payload:
+          type: object
+          additionalProperties: true
+
+    TreeNode:
+      type: object
+      required:
+        - path
+        - kind
+      properties:
+        path:
+          type: string
+        kind:
+          type: string
+          enum: [file, dir]
+        size:
+          type: integer
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/TreeNode'
+
+    FileChange:
+      type: object
+      required:
+        - path
+        - kind
+        - ts
+      properties:
+        path:
+          type: string
+        kind:
+          type: string
+          enum: [modified, added, deleted]
+        sha256:
+          type: string
+        ts:
+          type: string
+          format: date-time
+
+    AutomationRule:
+      type: object
+      required:
+        - trigger
+        - actions
+      properties:
+        name:
+          type: string
+        enabled:
+          type: boolean
+        trigger:
+          type: string
+          enum: [task.completed]
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AutomationAction'
+
+    AutomationAction:
+      type: object
+      required:
+        - type
+        - task
+      properties:
+        type:
+          type: string
+          enum: [create_task]
+        task:
+          $ref: '#/components/schemas/AutomationTaskSpec'
+
+    AutomationTaskSpec:
+      type: object
+      required:
+        - instructions
+      properties:
+        title:
+          type: string
+        instructions:
+          type: string
+        type:
+          type: string
+          enum: [ANALYZE, MODIFY, TEST, REVIEW, DOC, RELEASE, ROLLBACK]
+        priority:
+          type: integer
+          minimum: 0
+        tags:
+          type: array
+          items:
+            type: string
+        parent:
+          type: string
+          enum: [completed, none]
+
+    AutomationSimulateEvent:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum: [task.completed]
+        entity_id:
+          type: string
+          description: Task id as a string (required when payload.task_id is missing).
+        payload:
+          type: object
+          additionalProperties: true
+          description: Optional event payload; task_id can be supplied here instead of entity_id.
+
+    AutomationSimulateRequest:
+      type: object
+      required:
+        - event
+      properties:
+        event:
+          $ref: '#/components/schemas/AutomationSimulateEvent'
+
+    AutomationSimulatedTask:
+      type: object
+      required:
+        - project_id
+        - instructions
+        - type
+        - priority
+      properties:
+        project_id:
+          type: string
+        parent_task_id:
+          type: integer
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        instructions:
+          type: string
+        type:
+          type: string
+          enum: [ANALYZE, MODIFY, TEST, REVIEW, DOC, RELEASE, ROLLBACK]
+        priority:
+          type: integer
+        tags:
+          type: array
+          items:
+            type: string
+
+    AutomationSimulatedAction:
+      type: object
+      required:
+        - rule_name
+        - type
+        - task
+      properties:
+        rule_name:
+          type: string
+        type:
+          type: string
+          enum: [create_task]
+        task:
+          $ref: '#/components/schemas/AutomationSimulatedTask'
+
+    AutomationSimulateResponse:
+      type: object
+      required:
+        - actions
+        - tasks_that_would_be_created
+      properties:
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AutomationSimulatedAction'
+        tasks_that_would_be_created:
+          type: array
+          items:
+            $ref: '#/components/schemas/AutomationSimulatedTask'
+
+    CompletionContract:
+      type: object
+      description: Describes expected outputs for a claimed task based on its type.
+      properties:
+        required_fields:
+          type: array
+          items:
+            type: string
+        expected_outputs:
+          type: array
+          items:
+            type: string
+        notes:
+          type: string
+
+    TaskContext:
+      type: object
+      description: Automatically-assembled context for a task assignment.
+      properties:
+        context_pack:
+          $ref: '#/components/schemas/ContextPack'
+        memories:
+          type: array
+          items:
+            $ref: '#/components/schemas/Memory'
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/Policy'
+        dependencies:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskDependency'
+        recent_run_summaries:
+          type: array
+          items:
+            $ref: '#/components/schemas/RunSummary'
+        repo_files:
+          type: array
+          items:
+            type: string
+
+    AssignmentEnvelope:
+      type: object
+      description: Full envelope returned when a task is successfully claimed.
+      required:
+        - task
+        - lease
+        - run
+      properties:
+        task:
+          $ref: '#/components/schemas/Task'
+        lease:
+          $ref: '#/components/schemas/Lease'
+        run:
+          $ref: '#/components/schemas/Run'
+        project:
+          $ref: '#/components/schemas/Project'
+        completion_contract:
+          $ref: '#/components/schemas/CompletionContract'
+        context:
+          $ref: '#/components/schemas/TaskContext'
+
+    RepoFile:
+      type: object
+      required:
+        - id
+        - project_id
+        - path
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+        project_id:
+          type: string
+        path:
+          type: string
+        content_hash:
+          type: string
+        size_bytes:
+          type: integer
+          format: int64
+        language:
+          type: string
+        last_modified:
+          type: string
+        created_at:
+          type: string
+        updated_at:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+
+paths:
+  # Health & Version
+  /api/v2/health:
+    get:
+      tags:
+        - health
+      summary: Health check
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: METHOD_NOT_ALLOWED
+                  message: Method not allowed
+                  details:
+                    method: POST
+                    allowed_methods:
+                      - GET
+
+  /api/v2/version:
+    x-runtime-status: implemented
+    get:
+      tags:
+        - health
+      summary: Get service version info
+      operationId: getVersion
+      responses:
+        '200':
+          description: Version information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service:
+                    type: string
+                    example: cocopilot
+                  version:
+                    type: string
+                    example: 1.0.0
+                  api:
+                    type: object
+                    properties:
+                      v1:
+                        type: boolean
+                      v2:
+                        type: boolean
+                  schema_version:
+                    type: integer
+                    example: 4
+                  retention:
+                    type: object
+                    properties:
+                      enabled:
+                        type: boolean
+                        example: true
+                      interval_seconds:
+                        type: integer
+                        example: 3600
+                      max_rows:
+                        type: integer
+                        example: 0
+                      days:
+                        type: integer
+                        example: 30
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: METHOD_NOT_ALLOWED
+                  message: Method not allowed
+                  details:
+                    method: POST
+                    allowed_methods:
+                      - GET
+
+  /api/v2/config:
+    x-runtime-status: implemented
+    get:
+      tags:
+        - health
+      summary: Get runtime configuration (redacted)
+      operationId: getConfig
+      responses:
+        '200':
+          description: Runtime configuration snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeConfig'
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: METHOD_NOT_ALLOWED
+                  message: Method not allowed
+                  details:
+                    method: POST
+                    allowed_methods:
+                      - GET
+
+  # Projects
+  /api/v2/projects:
+    x-runtime-status: implemented
+    get:
+      tags:
+        - projects
+      summary: List all projects
+      operationId: listProjects
+      responses:
+        '200':
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  projects:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Project'
+
+    post:
+      tags:
+        - projects
+      summary: Create a new project
+      operationId: createProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectCreateRequest'
+      responses:
+        '201':
+          description: Project created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  project:
+                    $ref: '#/components/schemas/Project'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/projects/{projectId}:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+        example: proj_default
+    
+    get:
+      tags:
+        - projects
+      summary: Get project by ID
+      operationId: getProject
+      responses:
+        '200':
+          description: Project details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  project:
+                    $ref: '#/components/schemas/Project'
+        '400':
+          description: Invalid project ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      tags:
+        - projects
+      summary: Update project
+      operationId: updateProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectUpdateRequest'
+      responses:
+        '200':
+          description: Project updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  project:
+                    $ref: '#/components/schemas/Project'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    
+    patch:
+      tags:
+        - projects
+      summary: Partially update project
+      operationId: patchProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectUpdateRequest'
+      responses:
+        '200':
+          description: Project updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  project:
+                    $ref: '#/components/schemas/Project'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - projects
+      summary: Delete project
+      operationId: deleteProject
+      responses:
+        '204':
+          description: Project deleted
+        '400':
+          description: Invalid project ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Project deletion forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/projects/{projectId}/automation/rules:
+    x-runtime-status: implemented
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+
+    get:
+      tags:
+        - automation
+        - projects
+      summary: List automation rules for a project
+      description: Returns the active automation rules configured on the server (applies to all projects).
+      operationId: listProjectAutomationRules
+      responses:
+        '200':
+          description: Automation rules
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rules:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AutomationRule'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/projects/{projectId}/automation/simulate:
+    x-runtime-status: implemented
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+
+    post:
+      tags:
+        - automation
+        - projects
+      summary: Simulate automation rules for a project
+      description: Preview the automation actions and tasks that would be created for a supported event.
+      operationId: simulateProjectAutomation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutomationSimulateRequest'
+            example:
+              event:
+                kind: task.completed
+                entity_id: "123"
+                payload:
+                  task_id: 123
+      responses:
+        '200':
+          description: Simulation results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationSimulateResponse'
+              example:
+                actions:
+                  - rule_name: Followup
+                    type: create_task
+                    task:
+                      project_id: proj_default
+                      parent_task_id: 123
+                      title: Review Parent task
+                      instructions: Follow up 123
+                      type: REVIEW
+                      priority: 5
+                      tags:
+                        - auto
+                        - review
+                tasks_that_would_be_created:
+                  - project_id: proj_default
+                    parent_task_id: 123
+                    title: Review Parent task
+                    instructions: Follow up 123
+                    type: REVIEW
+                    priority: 5
+                    tags:
+                      - auto
+                      - review
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Automation blocked by policy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project or task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/projects/{projectId}/automation/replay:
+    x-runtime-status: implemented
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+
+    post:
+      tags:
+        - automation
+        - projects
+      summary: Replay automation since a given event ID
+      description: Re-run automation rules for task.completed events starting at the provided event ID (inclusive).
+      operationId: replayProjectAutomation
+      parameters:
+        - name: since_event_id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Anchor event ID for replay (inclusive).
+        - name: limit
+          in: query
+          required: false
+          description: Max number of events to replay (capped at 500).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+      responses:
+        '200':
+          description: Replay results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  since_event_id:
+                    type: string
+                  events_replayed:
+                    type: integer
+                  task_completed_events:
+                    type: integer
+              example:
+                since_event_id: evt_auto_1
+                events_replayed: 3
+                task_completed_events: 2
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Tasks
+  /api/v2/tasks:
+    x-runtime-status: implemented
+    get:
+      tags:
+        - tasks
+      summary: List tasks
+      description: Returns tasks ordered by created_at ascending by default, with optional filters.
+      operationId: listAllTasks
+      parameters:
+        - name: project_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter tasks by project ID
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by status (v1 or v2 value, e.g. IN_PROGRESS or RUNNING)
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - ANALYZE
+              - MODIFY
+              - TEST
+              - REVIEW
+              - DOC
+              - RELEASE
+              - ROLLBACK
+          description: Filter by task type
+        - name: tag
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by tag (exact match)
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Case-insensitive search in title and instructions
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - created_at:asc
+              - created_at:desc
+              - updated_at:asc
+              - updated_at:desc
+          description: Sort by created_at or updated_at
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+          description: Max number of tasks to return (capped at 500)
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Number of tasks to skip before returning results
+      responses:
+        '200':
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tasks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Task'
+                  total:
+                    type: integer
+                    description: Total number of tasks matching filters
+              example:
+                tasks:
+                  - id: 431
+                    project_id: proj_default
+                    title: Add pagination to tasks list
+                    instructions: Add limit/offset support in the tasks list response and update tests.
+                    type: MODIFY
+                    priority: 3
+                    tags: ["api", "v2", "tasks"]
+                    status_v1: NOT_PICKED
+                    status_v2: QUEUED
+                    parent_task_id: null
+                    output: null
+                    created_at: "2026-02-11T10:45:00Z"
+                    updated_at: "2026-02-11T10:45:00Z"
+                  - id: 432
+                    project_id: proj_default
+                    title: Add filters for project tasks list
+                    instructions: Support status and tag filters and ensure results are sorted.
+                    type: MODIFY
+                    priority: 2
+                    tags: ["api", "v2", "projects"]
+                    status_v1: IN_PROGRESS
+                    status_v2: RUNNING
+                    parent_task_id: null
+                    output: null
+                    created_at: "2026-02-11T11:05:00Z"
+                    updated_at: "2026-02-11T11:20:00Z"
+                total: 2
+        '400':
+          description: Invalid filter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      x-runtime-status: implemented
+      tags:
+        - tasks
+      summary: Create a task
+      operationId: createTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskCreateRequest'
+            example:
+              project_id: proj_default
+              title: Add pagination to tasks list
+              instructions: Add limit/offset support in the tasks list response and update tests.
+              type: MODIFY
+              priority: 3
+              tags: ["api", "v2", "tasks"]
+      responses:
+        '201':
+          description: Task created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task:
+                    $ref: '#/components/schemas/Task'
+              example:
+                task:
+                  id: 428
+                  project_id: proj_default
+                  title: Add pagination to tasks list
+                  instructions: Add limit/offset support in the tasks list response and update tests.
+                  type: MODIFY
+                  priority: 3
+                  tags: ["api", "v2", "tasks"]
+                  status_v1: NOT_PICKED
+                  status_v2: QUEUED
+                  parent_task_id: null
+                  output: null
+                  created_at: "2026-02-11T10:45:00Z"
+                  updated_at: "2026-02-11T10:45:00Z"
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v2/projects/{projectId}/tasks:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+    
+    get:
+      x-runtime-status: implemented
+      tags:
+        - tasks
+      summary: List tasks in a project
+      description: Returns tasks ordered by created_at ascending by default, with optional filters.
+      operationId: listProjectTasks
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by status (v1 or v2 value, e.g. IN_PROGRESS or RUNNING)
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - ANALYZE
+              - MODIFY
+              - TEST
+              - REVIEW
+              - DOC
+              - RELEASE
+              - ROLLBACK
+          description: Filter by task type
+        - name: tag
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by tag (exact match)
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Case-insensitive search in title and instructions
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - created_at:asc
+              - created_at:desc
+              - updated_at:asc
+              - updated_at:desc
+          description: Sort by created_at or updated_at
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+          description: Max number of tasks to return (capped at 500)
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Number of tasks to skip before returning results
+      responses:
+        '200':
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tasks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Task'
+                  total:
+                    type: integer
+                    description: Total number of tasks matching filters
+        '400':
+          description: Invalid filter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      x-runtime-status: implemented
+      tags:
+        - tasks
+      summary: Create a task in a project
+      description: Create a task scoped to the project. If a project_id is provided in the request body, it must match the path.
+      operationId: createProjectTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskCreateRequest'
+      responses:
+        '201':
+          description: Task created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task:
+                    $ref: '#/components/schemas/Task'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/tasks/{taskId}:
+    x-runtime-status: implemented
+    parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: integer
+    
+    get:
+      tags:
+        - tasks
+      summary: Get task details with latest run
+      description: Returns task details with parent chain and latest run summary when available.
+      operationId: getTask
+      responses:
+        '200':
+          description: Task details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskDetail'
+        '400':
+          description: Invalid task ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    patch:
+      tags:
+        - tasks
+      summary: Update task fields
+      operationId: updateTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskUpdateRequest'
+      responses:
+        '200':
+          description: Task updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task:
+                    $ref: '#/components/schemas/Task'
+        '400':
+          description: Invalid update payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - tasks
+      summary: Delete a task
+      operationId: deleteTask
+      responses:
+        '200':
+          description: Task deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task:
+                    $ref: '#/components/schemas/Task'
+        '400':
+          description: Invalid task ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/tasks/{taskId}/dependencies:
+    x-runtime-status: implemented
+    parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: integer
+
+    get:
+      tags:
+        - tasks
+      summary: List task dependencies
+      operationId: listTaskDependencies
+      responses:
+        '200':
+          description: Task dependencies
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskDependencyList'
+        '400':
+          description: Invalid task ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - tasks
+      summary: Add a task dependency
+      operationId: createTaskDependency
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskDependencyCreateRequest'
+      responses:
+        '201':
+          description: Dependency created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dependency:
+                    $ref: '#/components/schemas/TaskDependency'
+        '400':
+          description: Invalid dependency request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Dependency already exists or would create a cycle
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Temporary DB contention
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/tasks/{taskId}/dependencies/{dependsOnId}:
+    x-runtime-status: implemented
+    parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: integer
+      - name: dependsOnId
+        in: path
+        required: true
+        schema:
+          type: integer
+
+    delete:
+      tags:
+        - tasks
+      summary: Remove a task dependency
+      operationId: deleteTaskDependency
+      responses:
+        '200':
+          description: Dependency removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dependency:
+                    $ref: '#/components/schemas/TaskDependency'
+        '400':
+          description: Invalid task ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Task or dependency not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Temporary DB contention
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/tasks/{taskId}/claim:
+    x-runtime-status: implemented
+    parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: integer
+    
+    post:
+      tags:
+        - tasks
+        - leases
+      summary: Claim task for execution
+      description: Claims a task using lease semantics and returns the lease with the updated task.
+      operationId: claimTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimRequest'
+      responses:
+        '200':
+          description: Task claimed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimResponse'
+        '400':
+          description: Invalid task ID or request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Task already claimed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/tasks/{taskId}/complete:
+    x-runtime-status: implemented
+    parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: integer
+    
+    post:
+      tags:
+        - tasks
+      summary: Complete a task
+      description: Marks a task as COMPLETE, releases active leases, and completes the latest run.
+      operationId: completeTask
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteRequest'
+            examples:
+              modify:
+                summary: MODIFY completion
+                value:
+                  message: Completed task
+                  result:
+                    changes_made:
+                      - Updated task completion validation
+                    files_touched:
+                      - main.go
+              test:
+                summary: TEST completion
+                value:
+                  message: Tests executed
+                  result:
+                    tests_run:
+                      - go test ./...
+              doc:
+                summary: DOC completion
+                value:
+                  message: Documentation updated
+                  result:
+                    summary: Updated API docs for task completion
+              review:
+                summary: REVIEW completion
+                value:
+                  message: Review completed
+                  result:
+                    summary: Reviewed completion output
+                    risks:
+                      - None
+      responses:
+        '200':
+          description: Task completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task:
+                    $ref: '#/components/schemas/Task'
+        '400':
+          description: Invalid completion data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Task already complete
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Agents
+  /api/v2/agents:
+    x-runtime-status: implemented
+    get:
+      tags:
+        - agents
+      summary: List agents
+      operationId: listAgents
+      parameters:
+        - name: status
+          in: query
+          description: Filter by activity status (active = online/busy/idle, stale = offline)
+          schema:
+            type: string
+            enum:
+              - active
+              - stale
+        - name: since
+          in: query
+          description: Filter agents with last_seen or registered_at on/after this RFC3339 timestamp
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+          description: Max number of agents to return (capped at 500)
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Number of agents to skip before returning results
+        - name: sort
+          in: query
+          required: false
+          description: Sort order for agents (created_at default is ascending)
+          schema:
+            type: string
+            enum:
+              - created_at
+              - last_seen:asc
+              - last_seen:desc
+      responses:
+        '200':
+          description: List of registered agents
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agents:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Agent'
+                  total:
+                    type: integer
+                    description: Total number of agents matching filters
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+        - agents
+      summary: Register agent
+      operationId: registerAgent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentRegisterRequest'
+      responses:
+        '201':
+          description: Agent registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agent:
+                    $ref: '#/components/schemas/Agent'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: INVALID_ARGUMENT
+                  message: name and workdir are required
+        '403':
+          description: Insufficient scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Insufficient scope
+                  details:
+                    required_scope: projects:write
+              example:
+                error:
+                  code: INVALID_ARGUMENT
+                  message: Agent name is required
+
+  /api/v2/agents/{agentId}:
+    x-runtime-status: implemented
+    parameters:
+      - name: agentId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+        - agents
+      summary: Get agent details
+      operationId: getAgent
+      responses:
+        '200':
+          description: Agent detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agent:
+                    $ref: '#/components/schemas/Agent'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - agents
+      summary: Delete agent
+      operationId: deleteAgent
+      responses:
+        '200':
+          description: Agent deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agent:
+                    $ref: '#/components/schemas/Agent'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/agents/{agentId}/heartbeat:
+    x-runtime-status: implemented
+    parameters:
+      - name: agentId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      tags:
+        - agents
+      summary: Update agent heartbeat
+      operationId: heartbeatAgent
+      responses:
+        '200':
+          description: Heartbeat updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Heartbeat updated
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Leases
+  /api/v2/leases:
+    x-runtime-status: implemented
+    post:
+      tags:
+        - leases
+      summary: Create lease for task claim
+      operationId: createLease
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaseCreateRequest'
+      responses:
+        '200':
+          description: Lease created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lease'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: INVALID_ARGUMENT
+                  message: task_id and agent_id are required
+        '409':
+          description: Task already leased
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: CONFLICT
+                  message: Task is already leased by another agent
+                  details:
+                    task_id: 123
+                    agent_id: agent_xyz
+        '403':
+          description: Insufficient scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Insufficient scope
+                  details:
+                    required_scope: leases:write
+        '503':
+          description: Temporary DB contention
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/leases/{leaseId}/heartbeat:
+    x-runtime-status: implemented
+    parameters:
+      - name: leaseId
+        in: path
+        required: true
+        schema:
+          type: string
+    
+    post:
+      tags:
+        - leases
+      summary: Renew lease
+      operationId: renewLease
+      responses:
+        '200':
+          description: Lease renewed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lease'
+        '404':
+          description: Lease not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: Lease has expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/leases/{leaseId}/release:
+    x-runtime-status: implemented
+    parameters:
+      - name: leaseId
+        in: path
+        required: true
+        schema:
+          type: string
+    
+    post:
+      tags:
+        - leases
+      summary: Release lease
+      operationId: releaseLease
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Lease released
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaseReleaseResponse'
+        '404':
+          description: Lease not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Runs
+  /api/v2/runs/{runId}:
+    parameters:
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+    
+    get:
+      tags:
+        - runs
+      summary: Get run details
+      operationId: getRun
+      responses:
+        '200':
+          description: Run details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunEnvelope'
+              example:
+                run:
+                  id: run_abc123
+                  task_id: 123
+                  agent_id: agent_xyz
+                  status: SUCCEEDED
+                  started_at: '2026-02-11T18:02:04Z'
+                  finished_at: '2026-02-11T18:05:31Z'
+                  steps:
+                    - id: step_001
+                      name: Fetch repository
+                      status: SUCCEEDED
+                      details:
+                        repo: https://example.com/repo.git
+                      created_at: '2026-02-11T18:02:10Z'
+                    - id: step_002
+                      name: Run tests
+                      status: FAILED
+                      details:
+                        command: go test ./...
+                        exit_code: 1
+                      created_at: '2026-02-11T18:04:02Z'
+                  logs:
+                    - id: log_001
+                      level: info
+                      message: "Cloned repository"
+                      created_at: '2026-02-11T18:02:12Z'
+                    - id: log_002
+                      level: error
+                      message: "Test failure in package db"
+                      created_at: '2026-02-11T18:05:20Z'
+                  artifacts:
+                    - id: artifact_abc
+                      kind: report
+                      storage_ref: s3://runs/run_abc123/report.txt
+                      sha256: 8b5b9b5f56f1f50a3d8c76f9c552fd1b7fbd2e5e2d7e3c11b6f25bb9f47a9a00
+                      size: 2048
+                      metadata:
+                        name: test-report.txt
+                      created_at: '2026-02-11T18:05:25Z'
+                  tool_invocations:
+                    - id: tool_001
+                      tool_name: run_in_terminal
+                      input:
+                        command: go test ./...
+                      output:
+                        exit_code: 1
+                        stderr: "--- FAIL: TestDB"
+                      started_at: '2026-02-11T18:04:05Z'
+                      finished_at: '2026-02-11T18:05:18Z'
+        '400':
+          description: Invalid run id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: INVALID_ARGUMENT
+                  message: Invalid run ID
+                  details:
+                    run_id: ""
+        '404':
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: "run not found: run_missing"
+                  details:
+                    run_id: run_missing
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/runs/{runId}/steps:
+    x-runtime-status: implemented
+    parameters:
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+    
+    post:
+      tags:
+        - runs
+      summary: Add a step to run
+      description: Add a step to the execution ledger for a run.
+      operationId: addRunStep
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunStepCreate'
+            example:
+              name: Fetch repository
+              status: STARTED
+              details:
+                repo: https://example.com/repo.git
+      responses:
+        '201':
+          description: Step added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  step:
+                    $ref: '#/components/schemas/RunStep'
+              example:
+                step:
+                  id: step_123
+                  name: Fetch repository
+                  status: STARTED
+                  details:
+                    repo: https://example.com/repo.git
+                  created_at: "2026-02-11T10:35:00Z"
+        '400':
+          description: Invalid run id or step payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/runs/{runId}/logs:
+    x-runtime-status: implemented
+    parameters:
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+    
+    post:
+      tags:
+        - runs
+      summary: Add log entry to run
+      description: Append a log entry to the execution ledger for a run.
+      operationId: addRunLog
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogEntry'
+            example:
+              stream: stdout
+              chunk: Running tests...
+              ts: "2026-02-11T10:36:10Z"
+      responses:
+        '204':
+          description: Log added
+        '400':
+          description: Invalid run id or log payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: INVALID_ARGUMENT
+                  message: Invalid log payload
+                  details:
+                    field: stream
+        '404':
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: "run not found: run_missing"
+                  details:
+                    run_id: run_missing
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Database unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/runs/{runId}/artifacts:
+    x-runtime-status: implemented
+    parameters:
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+    
+    post:
+      tags:
+        - runs
+      summary: Add artifact to run
+      description: Attach an artifact to the execution ledger for a run.
+      operationId: addRunArtifact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArtifactCreate'
+            example:
+              kind: report
+              storage_ref: s3://cocopilot/runs/run_123/report.md
+              sha256: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+              size: 8421
+              metadata:
+                format: markdown
+                title: Test Report
+      responses:
+        '201':
+          description: Artifact added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  artifact:
+                    $ref: '#/components/schemas/Artifact'
+              example:
+                artifact:
+                  id: artifact_abc
+                  kind: report
+                  storage_ref: s3://cocopilot/runs/run_123/report.md
+                  sha256: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+                  size: 8421
+                  metadata:
+                    format: markdown
+                    title: Test Report
+                  created_at: "2026-02-11T10:40:00Z"
+        '400':
+          description: Invalid run id or artifact payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Database unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Events
+  /api/v2/events:
+    x-runtime-status: implemented
+    get:
+      tags:
+        - events
+      summary: List events
+      operationId: listEvents
+      parameters:
+        - name: project_id
+          in: query
+          description: Filter by project ID
+          schema:
+            type: string
+        - name: type
+          in: query
+          description: Filter by event kind
+          schema:
+            type: string
+        - name: task_id
+          in: query
+          description: Filter by task ID
+          schema:
+            type: integer
+            minimum: 1
+        - name: since
+          in: query
+          description: Only return events created at or after this timestamp (RFC3339)
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            minimum: 1
+            maximum: 500
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: Event list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Event'
+                  total:
+                    type: integer
+                    description: Total number of events matching filters
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Insufficient scope
+                  details:
+                    required_scope: events.read or audit.read
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Events (SSE)
+  /api/v2/events/stream:
+    x-runtime-status: implemented
+    get:
+      tags:
+        - events
+      summary: Subscribe to events (SSE)
+      description: Stream new events as Server-Sent Events (SSE) with optional filtering. Keepalive comments are sent every `COCO_SSE_HEARTBEAT_SECONDS`.
+      operationId: streamEvents
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+          description: Filter by event kind (for example, task.created).
+        - name: project_id
+          in: query
+          schema:
+            type: string
+          description: Filter by project ID.
+        - name: since
+          in: query
+          description: Replay events created at or after this timestamp (RFC3339) or event id before streaming new ones.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Max number of replayed events when using since (capped at 500 or COCO_SSE_REPLAY_LIMIT_MAX if set).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+      responses:
+        '200':
+          description: Event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events stream
+              example: |
+                id: event_214
+                event: task.created
+                data: {"id":214,"project_id":"proj_default","title":"Add docs example","status":"open","created_at":"2026-02-11T10:30:00Z"}
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/projects/{projectId}/audit:
+    x-runtime-status: implemented
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+
+    get:
+      tags:
+        - events
+        - audit
+      summary: List project audit events
+      description: Return audit events for a project, including task, run, lease, policy, memory, and repo file changes.
+      operationId: listProjectAuditEvents
+      parameters:
+        - name: type
+          in: query
+          description: Filter by event kind
+          schema:
+            type: string
+        - name: task_id
+          in: query
+          description: Filter by task ID
+          schema:
+            type: integer
+            minimum: 1
+        - name: since
+          in: query
+          description: Only return events created at or after this timestamp (RFC3339)
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            minimum: 1
+            maximum: 500
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: Event list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Event'
+                  total:
+                    type: integer
+                    description: Total number of events matching filters
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/projects/{projectId}/events/stream:
+    x-runtime-status: implemented
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+
+    get:
+      tags:
+        - events
+      summary: Subscribe to project events (SSE)
+      description: Stream new events for a project as Server-Sent Events (SSE). Keepalive comments are sent every `COCO_SSE_HEARTBEAT_SECONDS`.
+      operationId: streamProjectEvents
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+          description: Filter by event kind (for example, task.created).
+        - name: since
+          in: query
+          description: Replay events created at or after this timestamp (RFC3339) or event id before streaming new ones.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Max number of replayed events when using since (capped at 500 or COCO_SSE_REPLAY_LIMIT_MAX if set).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+      responses:
+        '200':
+          description: Event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events stream
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/projects/{projectId}/events/replay:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+    
+    get:
+      x-runtime-status: implemented
+      tags:
+        - events
+      summary: Replay events since a given event ID
+      description: Replay project events starting at the provided event ID, returned oldest to newest.
+      operationId: replayProjectEvents
+      parameters:
+        - name: since_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Max number of replayed events (capped at 500).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+      responses:
+        '200':
+          description: List of events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Event'
+              example:
+                events:
+                  - id: event_214
+                    project_id: proj_default
+                    kind: task.created
+                    entity_type: task
+                    entity_id: "214"
+                    created_at: "2026-02-11T10:30:00Z"
+                    payload:
+                      title: Add docs example
+                      status: open
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/projects/{projectId}/policies:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+
+    get:
+      x-runtime-status: implemented
+      tags:
+        - policies
+      summary: List policies for a project
+      operationId: listProjectPolicies
+      parameters:
+        - name: enabled
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Filter policies by enabled flag.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+          description: Max number of policies to return (capped at 500)
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Number of policies to skip before returning results
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - created_at:asc
+              - created_at:desc
+              - name:asc
+              - name:desc
+            default: created_at:asc
+          description: Sort policies by created_at or name.
+      responses:
+        '200':
+          description: Policy list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  policies:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Policy'
+                  total:
+                    type: integer
+                    description: Total number of policies matching filters
+              example:
+                policies:
+                  - id: pol_abc
+                    project_id: proj_default
+                    name: Default Policy
+                    description: Enforce task audit
+                    rules:
+                      - type: automation.block
+                        reason: No automated followups
+                    enabled: true
+                    created_at: 2026-02-11T12:00:00Z
+                total: 1
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Insufficient scope
+                  details:
+                    required_scope: policy.read
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      x-runtime-status: implemented
+      tags:
+        - policies
+      summary: Create a policy in a project
+      operationId: createProjectPolicy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyCreateRequest'
+      responses:
+        '201':
+          description: Policy created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  policy:
+                    $ref: '#/components/schemas/Policy'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Insufficient scope
+                  details:
+                    required_scope: policy.write
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/projects/{projectId}/policies/{policyId}:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: policyId
+        in: path
+        required: true
+        schema:
+          type: string
+
+    get:
+      x-runtime-status: implemented
+      tags:
+        - policies
+      summary: Get a policy in a project
+      operationId: getProjectPolicy
+      responses:
+        '200':
+          description: Policy detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  policy:
+                    $ref: '#/components/schemas/Policy'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Insufficient scope
+                  details:
+                    required_scope: policy.read
+        '404':
+          description: Policy not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    patch:
+      x-runtime-status: implemented
+      tags:
+        - policies
+      summary: Update a policy in a project
+      operationId: updateProjectPolicy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyUpdateRequest'
+      responses:
+        '200':
+          description: Policy updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  policy:
+                    $ref: '#/components/schemas/Policy'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Insufficient scope
+                  details:
+                    required_scope: policy.write
+        '404':
+          description: Policy not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      x-runtime-status: implemented
+      tags:
+        - policies
+      summary: Delete a policy in a project
+      operationId: deleteProjectPolicy
+      responses:
+        '204':
+          description: Policy deleted
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Insufficient scope
+                  details:
+                    required_scope: policy.write
+        '404':
+          description: Policy not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Memory
+  /api/v2/projects/{projectId}/memory:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+    
+    get:
+      x-runtime-status: implemented
+      tags:
+        - memory
+      summary: Query memory items
+      description: Query memory items for a project.
+      operationId: queryMemory
+      parameters:
+        - name: scope
+          in: query
+          schema:
+            type: string
+        - name: key
+          in: query
+          schema:
+            type: string
+        - name: q
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Memory items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MemoryItem'
+              example:
+                items:
+                  - id: mem_384
+                    scope: TASK
+                    key: task_384_notes
+                    value:
+                      notes: "Investigate context pack defaults."
+                    source_refs:
+                      - type: task
+                        id: 384
+                    created_at: "2026-02-11T10:15:00Z"
+                    updated_at: "2026-02-11T10:16:00Z"
+
+    put:
+      x-runtime-status: implemented
+      tags:
+        - memory
+      summary: Store or update memory item
+      description: Store or update a memory item for the project.
+      operationId: putMemory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemoryPutRequest'
+            example:
+              scope: TASK
+              key: task_384_notes
+              value:
+                notes: "Document memory and context pack examples."
+                priority: "high"
+              source_refs:
+                - type: task
+                  id: 384
+      responses:
+        '200':
+          description: Memory stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  item:
+                    $ref: '#/components/schemas/MemoryItem'
+              example:
+                item:
+                  id: mem_384
+                  scope: TASK
+                  key: task_384_notes
+                  value:
+                    notes: "Document memory and context pack examples."
+                    priority: "high"
+                  source_refs:
+                    - type: task
+                      id: 384
+                  created_at: "2026-02-11T10:20:00Z"
+                  updated_at: "2026-02-11T10:20:00Z"
+
+  # Context Packs
+  /api/v2/projects/{projectId}/context-packs:
+    x-runtime-status: implemented
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+    
+    post:
+      tags:
+        - context
+      summary: Generate context pack for a task
+      description: Generate and persist a context pack for a task in the project.
+      operationId: createContextPack
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContextPackCreateRequest'
+            example:
+              task_id: 384
+              query: "memory and context packs endpoints"
+              budget:
+                max_files: 20
+                max_bytes: 250000
+                max_snippets: 80
+      responses:
+        '201':
+          description: Context pack generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  context_pack:
+                    $ref: '#/components/schemas/ContextPack'
+              example:
+                context_pack:
+                  id: pack_384
+                  task_id: 384
+                  summary: "Relevant migration and API docs for memory and context packs."
+                  contents:
+                    files:
+                      - path: "migrations/0010_context_packs.sql"
+                        snippets:
+                          - start: 1
+                            end: 120
+                            text: "CREATE TABLE context_packs (...);"
+                    related_tasks:
+                      - 381
+                      - 382
+                    decisions:
+                      - "Store request examples under endpoints"
+                    repo_state:
+                      git_head: "abc1234"
+                      dirty: true
+
+  /api/v2/context-packs/{packId}:
+    x-runtime-status: implemented
+    parameters:
+      - name: packId
+        in: path
+        required: true
+        schema:
+          type: string
+
+    get:
+      tags:
+        - context
+      summary: Get context pack detail
+      description: Returns a previously generated context pack by id.
+      operationId: getContextPack
+      responses:
+        '200':
+          description: Context pack detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  context_pack:
+                    $ref: '#/components/schemas/ContextPack'
+              example:
+                context_pack:
+                  id: pack_384
+                  task_id: 384
+                  project_id: proj_default
+                  summary: "Relevant migration and API docs for memory and context packs."
+                  contents:
+                    files:
+                      - path: "migrations/0010_context_packs.sql"
+                        snippets:
+                          - start: 1
+                            end: 120
+                            text: "CREATE TABLE context_packs (...);"
+                    related_tasks:
+                      - 381
+                      - 382
+                    decisions:
+                      - "Store request examples under endpoints"
+                    repo_state:
+                      git_head: "abc1234"
+                      dirty: true
+
+  # Repo Perception
+  /api/v2/projects/{projectId}/tree:
+    x-runtime-status: implemented
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+    
+    get:
+      tags:
+        - context
+      summary: Get project file tree
+      description: Returns a shallow workdir snapshot.
+      operationId: getProjectTree
+      responses:
+        '200':
+          description: Project tree
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tree:
+                    $ref: '#/components/schemas/TreeNode'
+              example:
+                tree:
+                  path: "."
+                  kind: dir
+                  children:
+                    - path: "README.md"
+                      kind: file
+                      size: 1234
+                    - path: "src"
+                      kind: dir
+                      children:
+                        - path: "src/main.go"
+                          kind: file
+                          size: 2048
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/projects/{projectId}/changes:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: since
+        in: query
+        schema:
+          type: string
+          format: date-time
+    
+    get:
+      tags:
+        - context
+      summary: Get file changes since a timestamp
+      description: Returns working tree changes based on git status. The since filter is applied to file modification timestamps when available.
+      operationId: getFileChanges
+      responses:
+        '200':
+          description: File changes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  changes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FileChange'
+              example:
+                changes:
+                  - path: "README.md"
+                    kind: modified
+                    sha256: "0f4acfb09d1e9b2c8b0554d5f99d4f6c7e5c92a1f1d2b3c4d5e6f7a8b9c0d1e2"
+                    ts: "2026-02-11T10:30:00Z"
+                  - path: "docs/new.md"
+                    kind: added
+                    ts: "2026-02-11T10:35:00Z"
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/backup:
+    get:
+      tags:
+        - health
+      summary: Download database backup
+      description: Streams the SQLite database file as a download.
+      operationId: getBackup
+      responses:
+        '200':
+          description: SQLite database file
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/restore:
+    post:
+      tags:
+        - health
+      summary: Restore database from upload
+      description: Replaces the current database with an uploaded SQLite file.
+      operationId: restoreBackup
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Restore succeeded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: restored
+        '400':
+          description: Invalid upload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/projects/{projectId}/tasks/claim-next:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      tags:
+        - tasks
+      summary: Claim next available task
+      description: |
+        Atomically finds the highest-priority unclaimed task in the project
+        and claims it for the requesting agent.  Returns the full
+        AssignmentEnvelope including task, lease, run, project, completion
+        contract, and assembled context.
+      operationId: claimNextTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                agent_id:
+                  type: string
+                mode:
+                  type: string
+              required:
+                - agent_id
+      responses:
+        '200':
+          description: Task claimed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignmentEnvelope'
+        '204':
+          description: No tasks available
+        '409':
+          description: Conflict (e.g. concurrent claim)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/projects/{projectId}/repo-files:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+        - context
+      summary: List repo files
+      description: Lists tracked repository files for a project, with optional language filter and pagination.
+      operationId: listRepoFiles
+      parameters:
+        - name: language
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Repo files list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  files:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RepoFile'
+                  total:
+                    type: integer
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+        - context
+      summary: Sync repo files
+      description: Upserts repo file records for a project from a provided file list.
+      operationId: syncRepoFiles
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      path:
+                        type: string
+                      language:
+                        type: string
+                      size_bytes:
+                        type: integer
+                      content_hash:
+                        type: string
+                    required:
+                      - path
+      responses:
+        '200':
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  synced:
+                    type: integer
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/metrics:
+    get:
+      tags:
+        - health
+      summary: System metrics
+      description: Returns global system metrics including task counts by status, agent/event/run/project counts, active leases, and automation circuit state.
+      operationId: getMetrics
+      responses:
+        '200':
+          description: System metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tasks:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      queued:
+                        type: integer
+                      running:
+                        type: integer
+                      succeeded:
+                        type: integer
+                      failed:
+                        type: integer
+                      needs_review:
+                        type: integer
+                  agents:
+                    type: integer
+                  events:
+                    type: integer
+                  runs:
+                    type: integer
+                  projects:
+                    type: integer
+                  active_leases:
+                    type: integer
+                  automation_circuit:
+                    type: string
+                    enum: [closed, open, unknown]
+
+  /api/v2/audit:
+    get:
+      tags:
+        - audit
+      summary: Global audit events
+      description: Returns audit.* events across all projects with filters for type, project, since, limit, and offset.
+      operationId: listGlobalAuditEvents
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+          description: Event kind filter (e.g. audit.policy.changed). Defaults to all audit.* events.
+        - name: project_id
+          in: query
+          schema:
+            type: string
+          description: Filter by project ID
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Only return events after this timestamp
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            maximum: 500
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Audit events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Event'
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+
+  /api/v2/projects/{projectId}/dashboard:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+        - projects
+      summary: Project dashboard
+      description: |
+        Returns a comprehensive project overview including task counts by status bucket,
+        active runs, active agents, recent repo changes, recent failures, automation events,
+        multi-signal recommendations with "why" explanations, and stalled tasks.
+      operationId: getProjectDashboard
+      responses:
+        '200':
+          description: Dashboard projection
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  project_id:
+                    type: string
+                  task_counts:
+                    type: object
+                    properties:
+                      queued:
+                        type: integer
+                      in_progress:
+                        type: integer
+                      completed:
+                        type: integer
+                      failed:
+                        type: integer
+                  active_runs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        run_id:
+                          type: string
+                        task_title:
+                          type: string
+                        status:
+                          type: string
+                        started_at:
+                          type: string
+                  recent_changes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path:
+                          type: string
+                        updated_at:
+                          type: string
+                  recent_failures:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        task_id:
+                          type: integer
+                        title:
+                          type: string
+                        error:
+                          type: string
+                        updated_at:
+                          type: string
+                  automation_events:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        kind:
+                          type: string
+                        created_at:
+                          type: string
+                  recommendations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        task_id:
+                          type: integer
+                        title:
+                          type: string
+                        priority:
+                          type: integer
+                        type:
+                          type: string
+                        why:
+                          type: string
+                  stalled_tasks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        task_id:
+                          type: integer
+                        title:
+                          type: string
+                        status:
+                          type: string
+                        agent_id:
+                          type: string
+                        claimed_at:
+                          type: string
+                        reason:
+                          type: string
+                  active_agents:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        status:
+                          type: string
+                        last_heartbeat:
+                          type: string
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v2/artifacts/{artifactId}/comments:
+    parameters:
+      - name: artifactId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+        - runs
+      summary: List artifact comments
+      description: Returns comments attached to an artifact.
+      operationId: listArtifactComments
+      responses:
+        '200':
+          description: Artifact comments
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  comments:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        body:
+                          type: string
+                        author:
+                          type: string
+                        created_at:
+                          type: string
+    post:
+      tags:
+        - runs
+      summary: Add artifact comment
+      description: Adds a comment to an artifact.
+      operationId: addArtifactComment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                body:
+                  type: string
+                author:
+                  type: string
+              required:
+                - body
+      responses:
+        '201':
+          description: Comment created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  body:
+                    type: string
+                  author:
+                    type: string
+                  created_at:
+                    type: string
