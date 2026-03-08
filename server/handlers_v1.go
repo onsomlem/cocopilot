@@ -897,6 +897,11 @@ func instructionsHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, getInstructions())
 }
 
+func instructionsDetailedHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	fmt.Fprint(w, getDetailedInstructions())
+}
+
 func getWorkdirHandler(w http.ResponseWriter, r *http.Request) {
 	workdirMu.RLock()
 	wd := workdir

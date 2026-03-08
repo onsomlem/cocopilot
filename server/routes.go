@@ -99,6 +99,7 @@ func registerRoutes(mux *http.ServeMux, cfg runtimeConfig) {
 	mux.HandleFunc("/update-status", withV1MutationAuth(cfg, updateStatusHandler))
 	mux.HandleFunc("/create", withV1MutationAuth(cfg, createHandler))
 	mux.HandleFunc("/instructions", instructionsHandler)
+	mux.HandleFunc("/instructions-detailed", instructionsDetailedHandler)
 	mux.HandleFunc("/api/workdir", getWorkdirHandler)
 	mux.HandleFunc("/set-workdir", withV1MutationAuth(cfg, setWorkdirHandler))
 	mux.HandleFunc("/delete", withV1MutationAuth(cfg, deleteTaskHandler))
