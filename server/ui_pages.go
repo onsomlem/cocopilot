@@ -65,14 +65,19 @@ func subPageHead(title string) string {
 		`<a class="nav-title" href="/">Cocopilot</a>` +
 		`<nav>` +
 		`<a href="/">Kanban</a>` +
+		`<a href="/projects">Projects</a>` +
 		`<a href="/agents">Agents</a>` +
 		`<a href="/runs">Runs</a>` +
 		`<a href="/memory">Memory</a>` +
+		`<a href="/policies">Policies</a>` +
+		`<a href="/dependencies">Dependencies</a>` +
 		`<a href="/context-packs">Context Packs</a>` +
+		`<a href="/events-browser">Events</a>` +
 		`<a href="/graphs/tasks">Task DAG</a>` +
 		`<a href="/graphs/repo">Repo Graph</a>` +
 		`<a href="/repo">Repo</a>` +
 		`<a href="/audit">Audit</a>` +
+		`<a href="/settings">Settings</a>` +
 		`<a href="/health">Health</a>` +
 		`</nav></div>` +
 		`<div class="page-body">`
@@ -786,6 +791,7 @@ func repoPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("<div class=\"meta\">")
 	b.WriteString("<label class=\"field\">Project ID<input class=\"input\" id=\"repo-project\" value=\"proj_default\"></label>")
 	b.WriteString("<button class=\"btn\" id=\"repo-refresh\" type=\"button\">Refresh</button>")
+	b.WriteString("<button class=\"btn\" id=\"repo-scan\" type=\"button\" style=\"background:#0078d4;border-color:#0078d4;color:#fff;\">Scan Repo</button>")
 	b.WriteString("<span id=\"repo-status\" class=\"muted\">Loading...</span></div>")
 	b.WriteString("<div class=\"columns\">")
 	b.WriteString("<div><h2>File Tree</h2><ul class=\"tree\" id=\"repo-tree\"><li>Loading...</li></ul></div>")
@@ -828,6 +834,12 @@ func repoPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("await Promise.all([loadTree(),loadChanges()]);statusEl.textContent='Loaded';}")
 	b.WriteString("refreshBtn.addEventListener('click',loadAll);")
 	b.WriteString("projectEl.addEventListener('change',loadAll);")
+	// Scan button
+	b.WriteString("document.getElementById('repo-scan').addEventListener('click',async()=>{statusEl.textContent='Scanning...';try{")
+	b.WriteString("const res=await fetch('/api/v2/projects/'+encodeURIComponent(getProjectID())+'/files/scan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({purge:true})});")
+	b.WriteString("if(!res.ok)throw new Error('http '+res.status);const data=await res.json();")
+	b.WriteString("statusEl.textContent='Scan complete: '+data.synced+' synced, '+data.total+' total ('+data.scan_duration_ms+'ms)';")
+	b.WriteString("loadAll();}catch(err){statusEl.textContent='Scan failed';}});")
 	b.WriteString("loadAll();")
 	b.WriteString("</script>")
 	b.WriteString(subPageFoot())
@@ -1914,14 +1926,19 @@ const htmlTemplate = `
             </svg>
             <span class="header-title">Cocopilot</span>
             <nav class="header-nav" aria-label="Primary">
+                <a href="/projects">Projects</a>
                 <a href="/agents">Agents</a>
                 <a href="/runs">Runs</a>
                 <a href="/memory">Memory</a>
+                <a href="/policies">Policies</a>
+                <a href="/dependencies">Dependencies</a>
                 <a href="/context-packs">Context Packs</a>
+                <a href="/events-browser">Events</a>
                 <a href="/graphs/tasks">Task DAG</a>
                 <a href="/graphs/repo">Repo Graph</a>
                 <a href="/repo">Repo</a>
                 <a href="/audit">Audit</a>
+                <a href="/settings">Settings</a>
                 <a href="/health">Health</a>
             </nav>
             <div class="header-actions">
