@@ -4551,6 +4551,107 @@ paths:
                     type: string
                     enum: [closed, open, unknown]
 
+  /api/v2/status:
+    get:
+      tags:
+        - health
+      summary: Server status overview
+      description: Returns combined server status including version, schema version, uptime, and counts of active projects, leases, and runs.
+      operationId: getStatus
+      responses:
+        '200':
+          description: Server status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    type: string
+                  schema_version:
+                    type: integer
+                  db_path:
+                    type: string
+                  active_projects:
+                    type: integer
+                  active_leases:
+                    type: integer
+                  active_runs:
+                    type: integer
+                  uptime_seconds:
+                    type: integer
+                  uptime:
+                    type: string
+                  server_start:
+                    type: string
+                    format: date-time
+
+  /api/v2/projects/import:
+    post:
+      tags:
+        - backup
+      summary: Import project archive
+      description: Imports a previously exported project archive, creating a new project with all tasks, runs, memory, policies, and events.
+      operationId: importProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                schema_version:
+                  type: integer
+                exported_at:
+                  type: string
+                  format: date-time
+                project:
+                  $ref: '#/components/schemas/Project'
+                tasks:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/TaskV2'
+                runs:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Run'
+                memory:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Memory'
+                policies:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Policy'
+                events:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Event'
+              required:
+                - project
+      responses:
+        '200':
+          description: Import result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  project_id:
+                    type: string
+                  tasks_imported:
+                    type: integer
+                  runs_imported:
+                    type: integer
+                  memory_imported:
+                    type: integer
+                  policies_imported:
+                    type: integer
+                  events_imported:
+                    type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
   /api/v2/audit:
     get:
       tags:

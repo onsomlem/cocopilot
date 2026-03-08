@@ -17,7 +17,7 @@ For any shared or production deployment, enable API key authentication:
 ```bash
 export COCO_REQUIRE_API_KEY=true
 export COCO_API_KEY=$(openssl rand -hex 32)
-go run .
+go run ./cmd/cocopilot
 ```
 
 With auth enabled:
@@ -91,7 +91,7 @@ When agents execute tasks that modify the filesystem:
 
 - The default listen address is `127.0.0.1:8080` (localhost only). To expose on all interfaces:
   ```bash
-  COCO_HTTP_ADDR=0.0.0.0:8080 go run .
+  COCO_HTTP_ADDR=0.0.0.0:8080 go run ./cmd/cocopilot
   ```
 - Use firewall rules to restrict access to the server port
 - All SSE connections are server-to-client (no websocket upgrade needed)

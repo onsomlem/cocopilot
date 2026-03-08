@@ -12,7 +12,7 @@ A clear description of what the bug is.
 
 ## Steps to Reproduce
 
-1. Start the server with `go run .`
+1. Start the server with `go run ./cmd/cocopilot`
 2. Create a task via `curl -s -X POST ...`
 3. ...
 4. See error

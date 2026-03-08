@@ -1,6 +1,5 @@
 /**
  * AUTO-GENERATED typed API client -- DO NOT EDIT.
- * Generated at: 2026-03-08T06:17:45Z
  * Source: tools/codegen/codegen.go
  */
 

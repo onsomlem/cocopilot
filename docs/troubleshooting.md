@@ -62,7 +62,7 @@ If the database is corrupted beyond repair:
 rm tasks.db
 
 # Restart — migrations will recreate the schema
-go run .
+go run ./cmd/cocopilot
 ```
 
 All data will be lost. Use the backup/restore API regularly to prevent data loss.

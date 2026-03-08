@@ -4,7 +4,6 @@ src/
 tsconfig.json
 tsconfig.*.json
 
-out/
 dist/
 build/
 

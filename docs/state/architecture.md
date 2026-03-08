@@ -6,7 +6,7 @@
 
 ### Components
 
-**1. Go HTTP Server** (`main.go`)
+**1. Go HTTP Server** (`server/main.go`)
 - Port: 8080 (default)
 - Serves static Kanban UI plus v1 and v2 API endpoints
 - Handles concurrent requests with built-in Go HTTP server
@@ -204,7 +204,7 @@
 ### Development
 ```bash
 # Local development
-go run main.go
+go run ./cmd/cocopilot
 # Database: ./tasks.db
 # Config: Environment variables
 ```

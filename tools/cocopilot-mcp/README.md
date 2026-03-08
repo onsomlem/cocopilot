@@ -687,7 +687,7 @@ Add the server to your Claude Desktop MCP config (`~/Library/Application Support
 
 ### MCP ↔ Cocopilot Communication
 
-1. Start the Go server: `go run .`
+1. Start the Go server: `go run ./cmd/cocopilot`
 2. Start the MCP server: `npm run dev` (or `node dist/index.js`)
 3. Use MCP tools (e.g. `coco.task.list`, `coco.project.list`) and verify they return data from the running Cocopilot server.
 

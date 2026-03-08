@@ -27,7 +27,8 @@ echo "=== Cocopilot Release Packaging ==="
 # Step 1: Build the Go binary.
 echo "[1/4] Building Go binary..."
 cd "$ROOT_DIR"
-CGO_ENABLED=0 go build -o "$BUILD_DIR/$BINARY_NAME" ./cmd/cocopilot
+VERSION=$(cat "$ROOT_DIR/VERSION" 2>/dev/null || echo dev)
+CGO_ENABLED=0 go build -ldflags "-X github.com/onsomlem/cocopilot/server.Version=${VERSION}" -o "$BUILD_DIR/$BINARY_NAME" ./cmd/cocopilot
 echo "  Built: $BUILD_DIR/$BINARY_NAME"
 
 # Step 2: Stage release files.
@@ -44,7 +45,6 @@ rsync -a --exclude='.git/' \
          --exclude='*.exe~' \
          --exclude='dist/' \
          --exclude='tmp/' \
-
          --exclude='task-server' \
          --exclude='*.test' \
          --exclude='node_modules/' \

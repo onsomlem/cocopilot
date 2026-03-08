@@ -37,15 +37,17 @@ go test -cover ./...
 
 | File/Dir | Purpose |
 |----------|---------|
-| `main.go` | Entry point, server startup |
-| `routes.go` | HTTP route registration |
-| `handlers_v2_*.go` | v2 API handlers |
-| `handlers_v1.go` | v1 legacy handlers |
-| `models_v2.go` | Data models |
-| `db_v2.go` | Database operations |
-| `automation.go` | Automation rules engine |
-| `assignment.go` | Task claiming service |
-| `finalization.go` | Task completion service |
+| `cmd/cocopilot/main.go` | Thin entry point (imports `server` package) |
+| `server/main.go` | Server startup, DB init, background goroutines |
+| `server/routes.go` | HTTP route registration |
+| `server/handlers_v2_*.go` | v2 API handlers |
+| `server/handlers_v1.go` | v1 legacy handlers |
+| `server/models_v2.go` | Data models |
+| `server/db_v2.go` | Database operations |
+| `server/automation.go` | Automation rules engine |
+| `server/assignment.go` | Task claiming service |
+| `server/finalization.go` | Task completion service |
+| `internal/` | Internal packages (models, dbstore, config, etc.) |
 | `tools/` | MCP server + VS Code extension |
 | `migrations/` | SQLite schema migrations |
 

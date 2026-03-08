@@ -439,8 +439,8 @@ Target Launch: **March 14, 2026**
 ## Related Documents
 
 ### Current System
-- [../../main.go](../../main.go) - Current v1 implementation
-- [../../migrations.go](../../migrations.go) - Migration runner
+- [../../server/main.go](../../server/main.go) - Current v1 implementation
+- [../../server/migrations.go](../../server/migrations.go) - Migration runner
 - [../../migrations/](../../migrations/) - Applied migrations
 
 ### Architecture

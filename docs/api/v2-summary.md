@@ -689,7 +689,7 @@ For higher scale:
 ## Contact and Resources
 
 **Related Documents:**
-- Current v1 Implementation: [main.go](../../main.go)
+- Current v1 Implementation: [server/main.go](../../server/main.go)
 - Existing Migrations: [migrations/](../../migrations/)
 
 **Tools:**

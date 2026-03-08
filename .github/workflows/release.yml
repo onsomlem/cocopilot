@@ -39,6 +39,7 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           OUTPUT="cocopilot-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}"
+          mkdir -p dist
           go build -ldflags "-X github.com/onsomlem/cocopilot/server.Version=${VERSION}" -o "dist/${OUTPUT}" ./cmd/cocopilot
 
       - uses: actions/upload-artifact@v4

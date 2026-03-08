@@ -4,6 +4,10 @@
   "description": "Minimal VS Code extension scaffold.",
   "version": "0.0.1",
   "publisher": "cocopilot",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/onsomlem/cocopilot"
+  },
   "engines": {
     "vscode": "^1.80.0"
   },
@@ -503,6 +507,7 @@
   "devDependencies": {
     "@types/node": "^25.3.3",
     "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^3.7.1",
     "typescript": "^5.4.0"
   }
 }

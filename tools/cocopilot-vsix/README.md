@@ -691,7 +691,7 @@ Then open a workspace and run `Cocopilot: Hello` from the Command Palette to ver
 
 ### MCP ↔ Cocopilot Communication
 
-1. Start the Go server: `go run .`
+1. Start the Go server: `go run ./cmd/cocopilot`
 2. Start the MCP server via `Cocopilot: Start MCP Server` or set `cocopilot.autoStartMcpServer` to `true`
 3. Use MCP tools (e.g. `coco.task.list`, `coco.project.list`) and verify they return data from the running Cocopilot server.
 
