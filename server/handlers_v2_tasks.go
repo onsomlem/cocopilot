@@ -1326,6 +1326,9 @@ func v2ProjectTasksClaimNextHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Auto-register or touch agent record
+	_ = EnsureAgent(db, req.AgentID)
+
 	idlePlannerAttempted := false
 	idlePlannerSpawned := false
 	const maxAttempts = 5

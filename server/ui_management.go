@@ -466,7 +466,7 @@ func dependenciesHandler(w http.ResponseWriter, r *http.Request) {
 // ---------- Events Browser ----------
 
 func eventsBrowserHandler(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/events" {
+	if r.URL.Path != "/events-browser" {
 		http.NotFound(w, r)
 		return
 	}

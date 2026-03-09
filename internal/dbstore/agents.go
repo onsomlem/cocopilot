@@ -42,6 +42,18 @@ func RegisterAgent(db *sql.DB, name string, capabilities []string, metadata map[
 	return agent, nil
 }
 
+// EnsureAgent creates an agent record if it doesn't already exist.
+// If the agent exists, it updates last_seen and sets status to ONLINE.
+func EnsureAgent(db *sql.DB, agentID string) error {
+	now := models.NowISO()
+	_, err := db.Exec(`
+		INSERT INTO agents (id, name, status, last_seen, registered_at)
+		VALUES (?, ?, 'ONLINE', ?, ?)
+		ON CONFLICT(id) DO UPDATE SET status = 'ONLINE', last_seen = ?
+	`, agentID, agentID, now, now, now)
+	return err
+}
+
 func GetAgent(db *sql.DB, agentID string) (*models.Agent, error) {
 	var agent models.Agent
 	var capabilitiesJSON, metadataJSON sql.NullString

@@ -107,6 +107,7 @@ func RegisterAgent(db *sql.DB, name string, capabilities []string, metadata map[
 	return dbstore.RegisterAgent(db, name, capabilities, metadata)
 }
 func GetAgent(db *sql.DB, agentID string) (*Agent, error) { return dbstore.GetAgent(db, agentID) }
+func EnsureAgent(db *sql.DB, agentID string) error         { return dbstore.EnsureAgent(db, agentID) }
 func ListAgents(db *sql.DB, statusFilter string, since string, limit int, offset int, sortField string, sortDirection string) ([]Agent, int, error) {
 	return dbstore.ListAgents(db, statusFilter, since, limit, offset, sortField, sortDirection)
 }

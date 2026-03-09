@@ -124,7 +124,7 @@ All orchestrator communication uses the v2 JSON API.
 ### 1. Claim a task
 
 ` + "```" + `
-POST http://127.0.0.1:8080/api/v2/projects/default/tasks/claim-next
+POST http://127.0.0.1:8080/api/v2/projects/proj_default/tasks/claim-next
 Content-Type: application/json
 
 {"agent_id": "copilot"}

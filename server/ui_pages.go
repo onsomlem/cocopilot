@@ -1100,10 +1100,20 @@ func runsPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 		b.WriteString("input{flex:1;min-width:220px;}")
 		b.WriteString(".link{font-size:12px;color:#0078d4;text-decoration:none;border:1px dashed #505050;padding:8px 12px;border-radius:4px;}")
 		b.WriteString(".link.disabled{color:#858585;border-color:#3c3c3c;pointer-events:none;}")
+		b.WriteString(".runs-table{width:100%;border-collapse:collapse;margin-top:16px;font-size:12px;}")
+		b.WriteString(".runs-table th{text-align:left;color:#858585;font-weight:500;padding:6px 10px;border-bottom:1px solid #505050;}")
+		b.WriteString(".runs-table td{padding:6px 10px;border-bottom:1px solid #3c3c3c;color:#ccc;}")
+		b.WriteString(".runs-table tr:hover td{background:#2a2a2a;}")
+		b.WriteString(".status-badge{display:inline-block;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:500;}")
+		b.WriteString(".status-running{background:#1a3a1a;color:#4ec94e;}")
+		b.WriteString(".status-succeeded{background:#1a331a;color:#73c991;}")
+		b.WriteString(".status-failed{background:#3a1a1a;color:#f48771;}")
+		b.WriteString(".status-cancelled{background:#3a3a1a;color:#cca700;}")
+		b.WriteString(".empty{color:#858585;padding:20px 0;text-align:center;}")
 		b.WriteString("</style>")
 		b.WriteString("<div class=\"card\">")
 		b.WriteString("<h1>Runs</h1>")
-		b.WriteString("<p>Enter a run ID to open the run viewer.</p>")
+		b.WriteString("<p>Enter a run ID to open the run viewer, or browse recent runs below.</p>")
 		b.WriteString("<form id=\"run-lookup\" autocomplete=\"off\">")
 		b.WriteString("<label for=\"run-id\">Run ID</label>")
 		b.WriteString("<div class=\"row\">")
@@ -1112,7 +1122,10 @@ func runsPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 		b.WriteString("<a class=\"link disabled\" id=\"run-link\" href=\"/runs\">Open /runs/{runId}</a>")
 		b.WriteString("</div>")
 		b.WriteString("</form>")
-		b.WriteString("<p class=\"muted\">Route: /runs/{runId} | Data: GET /api/v2/runs/{runId}</p>")
+		b.WriteString("</div>")
+		b.WriteString("<div class=\"card\" style=\"margin-top:12px;\">")
+		b.WriteString("<h2 style=\"margin-bottom:8px;\">Recent Runs</h2>")
+		b.WriteString("<div id=\"runs-list\"><p class=\"empty\">Loading...</p></div>")
 		b.WriteString("</div>")
 		b.WriteString("<script>")
 		b.WriteString("const form=document.getElementById('run-lookup');")
@@ -1126,6 +1139,24 @@ func runsPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 		b.WriteString("const value=input.value.trim();if(!value){input.focus();return;}")
 		b.WriteString("window.location.href='/runs/'+encodeURIComponent(value);});")
 		b.WriteString("input.addEventListener('input',updateLink);updateLink();")
+		// Recent runs loader
+		b.WriteString("async function loadRuns(){const el=document.getElementById('runs-list');")
+		b.WriteString("try{const resp=await fetch('/api/v2/runs?limit=50');")
+		b.WriteString("if(!resp.ok){el.innerHTML='<p class=\"empty\">Failed to load runs ('+resp.status+')</p>';return;}")
+		b.WriteString("const data=await resp.json();const runs=data.runs||data||[];")
+		b.WriteString("if(!runs.length){el.innerHTML='<p class=\"empty\">No runs yet.</p>';return;}")
+		b.WriteString("let html='<table class=\"runs-table\"><thead><tr><th>Run ID</th><th>Task</th><th>Agent</th><th>Status</th><th>Started</th></tr></thead><tbody>';")
+		b.WriteString("runs.forEach(r=>{const sc=r.status||'unknown';")
+		b.WriteString("const cls=sc.toLowerCase().includes('run')?'running':sc.toLowerCase().includes('succ')?'succeeded':sc.toLowerCase().includes('fail')?'failed':'cancelled';")
+		b.WriteString("const started=r.started_at?new Date(r.started_at).toLocaleString():'—';")
+		b.WriteString("html+='<tr><td><a href=\"/runs/'+encodeURIComponent(r.id)+'\" style=\"color:#0078d4;\">'+r.id+'</a></td>';")
+		b.WriteString("html+='<td>#'+(r.task_id||'—')+'</td>';")
+		b.WriteString("html+='<td>'+(r.agent_id||'—')+'</td>';")
+		b.WriteString("html+='<td><span class=\"status-badge status-'+cls+'\">'+sc+'</span></td>';")
+		b.WriteString("html+='<td>'+started+'</td></tr>';});")
+		b.WriteString("html+='</tbody></table>';el.innerHTML=html;}")
+		b.WriteString("catch(err){el.innerHTML='<p class=\"empty\">Error: '+err+'</p>';}}")
+		b.WriteString("loadRuns();")
 		b.WriteString("</script>")
 		b.WriteString(subPageFoot())
 		fmt.Fprint(w, b.String())
@@ -1243,6 +1274,12 @@ const htmlTemplate = `
                 --vscode-success: #89d185;
                 --vscode-warning: #cca700;
                 --vscode-info: #3794ff;
+                --vscode-error: #f48771;
+                --vscode-dropdown-bg: #313131;
+                --vscode-charts-green: #388a34;
+                --vscode-charts-red: #c74e39;
+                --vscode-charts-orange: #d18616;
+                --vscode-charts-blue: #2670b8;
             }
 
             body {
@@ -1729,6 +1766,50 @@ const htmlTemplate = `
 
             [x-cloak] { display: none !important; }
 
+            /* Toast notifications */
+            .toast-container { position: fixed; top: 16px; right: 16px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+            .toast { background: var(--vscode-sidebar); border: 1px solid var(--vscode-border); border-radius: 6px; padding: 10px 16px; font-size: 12px; color: var(--vscode-text); box-shadow: 0 4px 12px rgba(0,0,0,0.4); display: flex; align-items: center; gap: 8px; animation: slideIn 0.2s ease; min-width: 200px; }
+            .toast.toast-success { border-left: 3px solid var(--vscode-success); }
+            .toast.toast-error { border-left: 3px solid var(--vscode-error); }
+            .toast.toast-info { border-left: 3px solid var(--vscode-info); }
+            @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+            /* Confirm dialog */
+            .confirm-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 2000; display: flex; align-items: center; justify-content: center; }
+            .confirm-dialog { background: var(--vscode-sidebar); border: 1px solid var(--vscode-border); border-radius: 8px; padding: 20px; max-width: 400px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+            .confirm-dialog p { margin-bottom: 16px; font-size: 13px; }
+            .confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+            /* Filter bar */
+            .filter-bar { display: flex; align-items: center; gap: 10px; padding: 8px 20px; background: var(--vscode-sidebar); border-bottom: 1px solid var(--vscode-border); flex-shrink: 0; }
+            .filter-bar input { background: var(--vscode-input-bg); border: 1px solid var(--vscode-border); border-radius: 4px; color: var(--vscode-text); padding: 5px 10px; font-size: 12px; width: 220px; outline: none; }
+            .filter-bar input:focus { border-color: var(--vscode-accent); }
+            .filter-bar select { background: var(--vscode-input-bg); border: 1px solid var(--vscode-border); border-radius: 4px; color: var(--vscode-text); padding: 5px 8px; font-size: 12px; outline: none; cursor: pointer; }
+            .filter-bar .filter-label { font-size: 11px; color: var(--vscode-text-muted); }
+            .filter-bar .task-count { font-size: 11px; color: var(--vscode-text-muted); margin-left: auto; }
+
+            /* Type/priority badges on cards */
+            .card-badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; padding: 0 12px 8px; }
+            .badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 500; text-transform: uppercase; }
+            .badge-type { background: rgba(55,148,255,0.15); color: var(--vscode-info); }
+            .badge-priority-high { background: rgba(244,135,113,0.15); color: var(--vscode-error); }
+            .badge-priority-medium { background: rgba(204,167,0,0.15); color: var(--vscode-warning); }
+            .badge-priority-low { background: rgba(137,209,133,0.15); color: var(--vscode-success); }
+            .badge-agent { background: rgba(204,204,204,0.1); color: var(--vscode-text-muted); }
+
+            /* Task detail drawer */
+            .detail-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 480px; background: var(--vscode-sidebar); border-left: 1px solid var(--vscode-border); z-index: 900; box-shadow: -4px 0 16px rgba(0,0,0,0.3); display: flex; flex-direction: column; transform: translateX(100%); transition: transform 0.2s ease; }
+            .detail-drawer.open { transform: translateX(0); }
+            .drawer-header { display: flex; align-items: center; justify-content: space-between; padding: 16px; border-bottom: 1px solid var(--vscode-border); flex-shrink: 0; }
+            .drawer-header h2 { font-size: 14px; font-weight: 600; }
+            .drawer-body { flex: 1; overflow-y: auto; padding: 16px; }
+            .drawer-section { margin-bottom: 16px; }
+            .drawer-section h3 { font-size: 12px; color: var(--vscode-text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+            .drawer-section pre { font-family: 'Cascadia Code','Fira Code',Consolas,monospace; font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; color: var(--vscode-text); padding: 10px; background: rgba(0,0,0,0.2); border-radius: 4px; margin: 0; }
+            .drawer-meta { display: grid; grid-template-columns: 100px 1fr; gap: 6px; font-size: 12px; }
+            .drawer-meta dt { color: var(--vscode-text-muted); }
+            .drawer-meta dd { color: var(--vscode-text); margin: 0; }
+
             /* Task hierarchy - indentation for child tasks */
             .task-card[data-depth="1"] { margin-left: 20px; border-left: 3px solid var(--vscode-accent); }
             .task-card[data-depth="2"] { margin-left: 40px; border-left: 3px solid var(--vscode-info); }
@@ -1834,6 +1915,60 @@ const htmlTemplate = `
         </style>
     </head>
     <body x-data="kanbanApp()" x-init="init()">
+        <!-- Toast notifications -->
+        <div class="toast-container">
+            <template x-for="(t, i) in toasts" :key="i">
+                <div class="toast" :class="'toast-' + t.type" x-text="t.message"
+                     x-init="setTimeout(() => toasts.splice(toasts.indexOf(t), 1), 3000)"></div>
+            </template>
+        </div>
+
+        <!-- Confirm dialog -->
+        <div class="confirm-overlay" x-show="confirmDialog.show" x-cloak @click.self="confirmDialog.show = false">
+            <div class="confirm-dialog">
+                <p x-text="confirmDialog.message"></p>
+                <div class="confirm-actions">
+                    <button class="btn btn-secondary" @click="confirmDialog.show = false">Cancel</button>
+                    <button class="btn btn-primary" @click="confirmDialog.onConfirm(); confirmDialog.show = false">Confirm</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Task detail drawer -->
+        <div class="detail-drawer" :class="{ 'open': selectedTask }" x-show="selectedTask" x-cloak>
+            <div class="drawer-header">
+                <h2 x-text="selectedTask ? '#' + selectedTask.id + ' Details' : ''"></h2>
+                <button class="modal-close" @click="selectedTask = null">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path fill-rule="evenodd" clip-rule="evenodd" d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.707.708L7.293 8l-3.646 3.646.707.708L8 8.707z"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="drawer-body" x-show="selectedTask">
+                <div class="drawer-section">
+                    <h3>Metadata</h3>
+                    <dl class="drawer-meta">
+                        <dt>ID</dt><dd x-text="selectedTask ? selectedTask.id : ''"></dd>
+                        <dt>Status</dt><dd x-text="selectedTask ? selectedTask.status : ''"></dd>
+                        <dt>Created</dt><dd x-text="selectedTask ? selectedTask.created_at : ''"></dd>
+                        <dt>Updated</dt><dd x-text="selectedTask ? (selectedTask.updated_at || '—') : ''"></dd>
+                        <dt>Parent</dt><dd x-text="selectedTask && selectedTask.parent_task_id ? '#' + selectedTask.parent_task_id : '—'"></dd>
+                        <dt>Priority</dt><dd x-text="selectedTask ? (selectedTask.priority || 'normal') : ''"></dd>
+                        <dt>Type</dt><dd x-text="selectedTask ? (selectedTask.type || '—') : ''"></dd>
+                        <dt>Agent</dt><dd x-text="selectedTask ? (selectedTask.agent_id || '—') : ''"></dd>
+                    </dl>
+                </div>
+                <div class="drawer-section">
+                    <h3>Instructions</h3>
+                    <pre x-text="selectedTask ? selectedTask.instructions : ''"></pre>
+                </div>
+                <div class="drawer-section" x-show="selectedTask && selectedTask.output">
+                    <h3>Output</h3>
+                    <pre x-text="selectedTask ? (selectedTask.output || '') : ''"></pre>
+                </div>
+            </div>
+        </div>
+
         <!-- Create Task Modal -->
         <div class="modal-overlay"
              x-show="showModal"
@@ -1854,6 +1989,11 @@ const htmlTemplate = `
                 <form @submit.prevent="createTask">
                     <div class="modal-body">
                         <div class="form-group">
+                            <label>Title (optional)</label>
+                            <input type="text" x-model="newTaskTitle" placeholder="Brief task title"
+                                   style="width:100%;background:var(--vscode-input-bg);border:1px solid var(--vscode-border);border-radius:6px;color:var(--vscode-text);font-family:inherit;font-size:13px;padding:10px 12px;outline:none;">
+                        </div>
+                        <div class="form-group">
                             <label>Parent Task (optional)</label>
                             <select x-model="newTaskParentId">
                                 <option value="">No parent (standalone task)</option>
@@ -1861,6 +2001,28 @@ const htmlTemplate = `
                                     <option :value="task.id" x-text="'#' + task.id + ': ' + task.instructions.substring(0, 50) + (task.instructions.length > 50 ? '...' : '')"></option>
                                 </template>
                             </select>
+                        </div>
+                        <div style="display:flex;gap:10px;margin-bottom:12px;">
+                            <div class="form-group" style="flex:1;">
+                                <label>Type (optional)</label>
+                                <select x-model="newTaskType" style="width:100%;background:var(--vscode-input-bg);border:1px solid var(--vscode-border);border-radius:6px;color:var(--vscode-text);font-size:13px;padding:10px 12px;outline:none;cursor:pointer;">
+                                    <option value="">None</option>
+                                    <option value="feature">Feature</option>
+                                    <option value="bug">Bug</option>
+                                    <option value="chore">Chore</option>
+                                    <option value="research">Research</option>
+                                    <option value="refactor">Refactor</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label>Priority (optional)</label>
+                                <select x-model="newTaskPriority" style="width:100%;background:var(--vscode-input-bg);border:1px solid var(--vscode-border);border-radius:6px;color:var(--vscode-text);font-size:13px;padding:10px 12px;outline:none;cursor:pointer;">
+                                    <option value="">Normal</option>
+                                    <option value="high">High</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="low">Low</option>
+                                </select>
+                            </div>
                         </div>
                         <div class="form-group">
                             <label>Instructions</label>
@@ -1990,6 +2152,39 @@ const htmlTemplate = `
             </div>
         </div>
 
+        <!-- Filter bar -->
+        <div class="filter-bar">
+            <span class="filter-label">Filter:</span>
+            <input type="text" placeholder="Search tasks..." x-model="searchQuery" @input="filterTasks">
+            <span class="filter-label">Sort:</span>
+            <select x-model="sortBy">
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="id">By ID</option>
+            </select>
+            <span class="task-count" x-text="tasks.length + ' task' + (tasks.length !== 1 ? 's' : '') + (searchQuery ? ' (' + filteredCount + ' matching)' : '')"></span>
+        </div>
+
+        <!-- Dashboard stats bar -->
+        <div style="display:flex;gap:12px;padding:10px 20px;background:var(--vscode-sidebar);border-bottom:1px solid var(--vscode-border);flex-shrink:0;">
+            <div style="background:var(--vscode-input-bg);border:1px solid var(--vscode-border);border-radius:6px;padding:8px 14px;flex:1;text-align:center;">
+                <div style="font-size:20px;font-weight:700;color:var(--vscode-warning);" x-text="todoTasks.length"></div>
+                <div style="font-size:10px;color:var(--vscode-text-muted);text-transform:uppercase;">Pending</div>
+            </div>
+            <div style="background:var(--vscode-input-bg);border:1px solid var(--vscode-border);border-radius:6px;padding:8px 14px;flex:1;text-align:center;">
+                <div style="font-size:20px;font-weight:700;color:var(--vscode-info);" x-text="progressTasks.length"></div>
+                <div style="font-size:10px;color:var(--vscode-text-muted);text-transform:uppercase;">In Progress</div>
+            </div>
+            <div style="background:var(--vscode-input-bg);border:1px solid var(--vscode-border);border-radius:6px;padding:8px 14px;flex:1;text-align:center;">
+                <div style="font-size:20px;font-weight:700;color:var(--vscode-success);" x-text="doneTasks.length"></div>
+                <div style="font-size:10px;color:var(--vscode-text-muted);text-transform:uppercase;">Done</div>
+            </div>
+            <div style="background:var(--vscode-input-bg);border:1px solid var(--vscode-border);border-radius:6px;padding:8px 14px;flex:1;text-align:center;">
+                <div style="font-size:20px;font-weight:700;color:var(--vscode-accent);" x-text="agents.filter(a => a.status === 'ONLINE').length"></div>
+                <div style="font-size:10px;color:var(--vscode-text-muted);text-transform:uppercase;">Agents Online</div>
+            </div>
+        </div>
+
         <div class="kanban-board">
             <!-- To Do Column -->
             <div class="kanban-column col-todo"
@@ -2008,11 +2203,13 @@ const htmlTemplate = `
                 <div class="column-body">
                     <template x-for="task in todoTasks" :key="task.id">
                         <div class="task-card"
+                             x-show="matchesSearch(task)"
                              draggable="true"
                              :class="{ 'dragging': draggingId === task.id }"
                              :data-depth="task.depth || 0"
                              @dragstart="startDrag(task)"
-                             @dragend="endDrag">
+                             @dragend="endDrag"
+                             @dblclick="selectedTask = task">
                             <div class="card-header" @click="toggleExpand(task.id)">
                                 <div class="card-left">
                                     <span class="card-id" x-text="'#' + task.id"></span>
@@ -2036,6 +2233,11 @@ const htmlTemplate = `
                                         <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
                                     </svg>
                                 </div>
+                            </div>
+                            <div class="card-badges" x-show="task.type || task.priority || task.agent_id">
+                                <span class="badge badge-type" x-show="task.type" x-text="task.type"></span>
+                                <span class="badge" :class="'badge-priority-' + (task.priority || 'medium').toLowerCase()" x-show="task.priority" x-text="task.priority"></span>
+                                <span class="badge badge-agent" x-show="task.agent_id" x-text="task.agent_id"></span>
                             </div>
                             <div class="card-body" x-show="expandedTasks.includes(task.id)" x-collapse>
                                 <pre class="card-instructions" x-text="task.instructions"></pre>
@@ -2063,11 +2265,13 @@ const htmlTemplate = `
                 <div class="column-body">
                     <template x-for="task in progressTasks" :key="task.id">
                         <div class="task-card"
+                             x-show="matchesSearch(task)"
                              draggable="true"
                              :class="{ 'dragging': draggingId === task.id }"
                              :data-depth="task.depth || 0"
                              @dragstart="startDrag(task)"
-                             @dragend="endDrag">
+                             @dragend="endDrag"
+                             @dblclick="selectedTask = task">
                             <div class="card-header" @click="toggleExpand(task.id)">
                                 <div class="card-left">
                                     <span class="card-id" x-text="'#' + task.id"></span>
@@ -2091,6 +2295,11 @@ const htmlTemplate = `
                                         <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
                                     </svg>
                                 </div>
+                            </div>
+                            <div class="card-badges" x-show="task.type || task.priority || task.agent_id">
+                                <span class="badge badge-type" x-show="task.type" x-text="task.type"></span>
+                                <span class="badge" :class="'badge-priority-' + (task.priority || 'medium').toLowerCase()" x-show="task.priority" x-text="task.priority"></span>
+                                <span class="badge badge-agent" x-show="task.agent_id" x-text="task.agent_id"></span>
                             </div>
                             <div class="card-body" x-show="expandedTasks.includes(task.id)" x-collapse>
                                 <pre class="card-instructions" x-text="task.instructions"></pre>
@@ -2117,11 +2326,13 @@ const htmlTemplate = `
                 <div class="column-body">
                     <template x-for="task in doneTasks" :key="task.id">
                         <div class="task-card"
+                             x-show="matchesSearch(task)"
                              draggable="true"
                              :class="{ 'dragging': draggingId === task.id }"
                              :data-depth="task.depth || 0"
                              @dragstart="startDrag(task)"
-                             @dragend="endDrag">
+                             @dragend="endDrag"
+                             @dblclick="selectedTask = task">
                             <div class="card-header" @click="toggleExpand(task.id)">
                                 <div class="card-left">
                                     <span class="card-id" x-text="'#' + task.id"></span>
@@ -2145,6 +2356,11 @@ const htmlTemplate = `
                                         <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
                                     </svg>
                                 </div>
+                            </div>
+                            <div class="card-badges" x-show="task.type || task.priority || task.agent_id">
+                                <span class="badge badge-type" x-show="task.type" x-text="task.type"></span>
+                                <span class="badge" :class="'badge-priority-' + (task.priority || 'medium').toLowerCase()" x-show="task.priority" x-text="task.priority"></span>
+                                <span class="badge badge-agent" x-show="task.agent_id" x-text="task.agent_id"></span>
                             </div>
                             <div class="card-body" x-show="expandedTasks.includes(task.id)" x-collapse>
                                 <pre class="card-instructions" x-text="task.instructions"></pre>
@@ -2174,6 +2390,9 @@ const htmlTemplate = `
                     copiedInstructions: false,
                     newTaskInstructions: '',
                     newTaskParentId: '',
+                    newTaskTitle: '',
+                    newTaskType: '',
+                    newTaskPriority: '',
                     draggingId: null,
                     draggingTask: null,
                     dragOverColumn: null,
@@ -2182,6 +2401,39 @@ const htmlTemplate = `
                     projects: [],
                     currentProject: 'proj_default',
                     agents: [],
+                    toasts: [],
+                    confirmDialog: { show: false, message: '', onConfirm: () => {} },
+                    searchQuery: '',
+                    sortBy: 'newest',
+                    selectedTask: null,
+
+                    // Toast helper
+                    showToast(message, type = 'info') {
+                        this.toasts.push({ message, type });
+                    },
+
+                    // Confirm dialog helper
+                    showConfirm(message, onConfirm) {
+                        this.confirmDialog = { show: true, message, onConfirm };
+                    },
+
+                    // Search filter
+                    matchesSearch(task) {
+                        if (!this.searchQuery) return true;
+                        const q = this.searchQuery.toLowerCase();
+                        return (
+                            String(task.id).includes(q) ||
+                            (task.instructions || '').toLowerCase().includes(q) ||
+                            (task.type || '').toLowerCase().includes(q) ||
+                            (task.agent_id || '').toLowerCase().includes(q) ||
+                            (task.title || '').toLowerCase().includes(q)
+                        );
+                    },
+
+                    get filteredCount() {
+                        if (!this.searchQuery) return this.tasks.length;
+                        return this.tasks.filter(t => this.matchesSearch(t)).length;
+                    },
 
                     // Compute task depth based on parent chain
                     getTaskDepth(task) {
@@ -2368,17 +2620,21 @@ const htmlTemplate = `
                             });
                             if (!response.ok) {
                                 const text = await response.text();
-                                alert('Failed to create task: ' + (text || response.statusText));
+                                this.showToast('Failed to create task: ' + (text || response.statusText), 'error');
                                 return;
                             }
                         } catch (error) {
-                            alert('Failed to create task: ' + error.message);
+                            this.showToast('Failed to create task: ' + error.message, 'error');
                             return;
                         }
 
                         this.newTaskInstructions = '';
                         this.newTaskParentId = '';
+                        this.newTaskTitle = '';
+                        this.newTaskType = '';
+                        this.newTaskPriority = '';
                         this.showModal = false;
+                        this.showToast('Task created', 'success');
                     },
 
                     toggleExpand(taskId) {
@@ -2431,25 +2687,25 @@ const htmlTemplate = `
                     },
 
                     async deleteTask(taskId) {
-                        if (!confirm('Are you sure you want to delete this task?')) {
-                            return;
-                        }
+                        this.showConfirm('Are you sure you want to delete task #' + taskId + '?', async () => {
+                            const formData = new FormData();
+                            formData.append('task_id', taskId);
 
-                        const formData = new FormData();
-                        formData.append('task_id', taskId);
-
-                        try {
-                            const response = await fetch('/delete', {
-                                method: 'POST',
-                                body: formData
-                            });
-                            if (!response.ok) {
-                                const text = await response.text();
-                                alert('Failed to delete task: ' + (text || response.statusText));
+                            try {
+                                const response = await fetch('/delete', {
+                                    method: 'POST',
+                                    body: formData
+                                });
+                                if (!response.ok) {
+                                    const text = await response.text();
+                                    this.showToast('Failed to delete task: ' + (text || response.statusText), 'error');
+                                } else {
+                                    this.showToast('Task #' + taskId + ' deleted', 'success');
+                                }
+                            } catch (error) {
+                                this.showToast('Failed to delete task: ' + error.message, 'error');
                             }
-                        } catch (error) {
-                            alert('Failed to delete task: ' + error.message);
-                        }
+                        });
                     }
                 };
             }

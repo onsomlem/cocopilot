@@ -191,8 +191,16 @@ func workerClaimNext(client *http.Client, baseURL, projectID, apiKey string) (in
 		return 0, "", "", fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	envelope, ok := result["envelope"].(map[string]interface{})
+	// v2 claim-next returns {"task": {...}, "lease": {...}, "run": {...}, "context": {...}}
+	task, ok := result["task"].(map[string]interface{})
 	if !ok {
+		// Legacy fallback: envelope format
+		if envelope, ok := result["envelope"].(map[string]interface{}); ok {
+			taskID := toInt(envelope["task_id"])
+			title, _ := envelope["title"].(string)
+			instructions, _ := envelope["instructions"].(string)
+			return taskID, title, instructions, nil
+		}
 		if tid, ok := result["task_id"]; ok {
 			taskID := toInt(tid)
 			return taskID, "", "", nil
@@ -200,9 +208,9 @@ func workerClaimNext(client *http.Client, baseURL, projectID, apiKey string) (in
 		return 0, "", "", fmt.Errorf("unexpected response format")
 	}
 
-	taskID := toInt(envelope["task_id"])
-	title, _ := envelope["title"].(string)
-	instructions, _ := envelope["instructions"].(string)
+	taskID := toInt(task["id"])
+	title, _ := task["title"].(string)
+	instructions, _ := task["instructions"].(string)
 
 	return taskID, title, instructions, nil
 }
