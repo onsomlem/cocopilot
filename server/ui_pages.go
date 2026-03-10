@@ -36,63 +36,78 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 	var b strings.Builder
 	b.WriteString(subPageHead("Dashboard"))
 	b.WriteString(`<style>
-.dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
-.dash-card { background: #252526; border: 1px solid #3c3c3c; border-radius: 8px; padding: 20px; text-align: center; }
-.dash-card .dc-label { font-size: 11px; color: #858585; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
-.dash-card .dc-value { font-size: 28px; font-weight: 700; color: #ccc; }
-.dash-card.ok .dc-value { color: #89d185; }
-.dash-card.warn .dc-value { color: #cca700; }
-.dash-card.error .dc-value { color: #f14c4c; }
-.dash-card.info .dc-value { color: #56b6f7; }
-.dash-section { background: #252526; border: 1px solid #3c3c3c; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
-.dash-section h2 { font-size: 14px; color: #e0e0e0; margin-bottom: 12px; border: none; padding: 0; }
+.dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.dash-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center; cursor: pointer; transition: border-color .15s; }
+.dash-card:hover { border-color: var(--accent); }
+.dash-card .dc-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+.dash-card .dc-value { font-size: 28px; font-weight: 700; color: var(--text); }
+.dash-card .dc-action { font-size: 10px; color: var(--accent); margin-top: 6px; opacity: 0; transition: opacity .15s; }
+.dash-card:hover .dc-action { opacity: 1; }
+.dash-card.ok .dc-value { color: var(--success); }
+.dash-card.warn .dc-value { color: var(--warning); }
+.dash-card.error .dc-value { color: var(--error); }
+.dash-card.info .dc-value { color: var(--info); }
+.dash-section { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+.dash-section h2 { font-size: 13px; color: #e0e0e0; margin-bottom: 10px; border: none; padding: 0; display: flex; align-items: center; justify-content: space-between; }
+.dash-section h2 a { font-size: 11px; color: var(--accent); text-decoration: none; font-weight: 400; }
+.dash-section h2 a:hover { text-decoration: underline; }
 .dash-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.dash-table th { color: #0078d4; font-weight: 600; font-size: 11px; text-transform: uppercase; padding: 6px 8px; border-bottom: 1px solid #3c3c3c; text-align: left; }
-.dash-table td { padding: 6px 8px; border-bottom: 1px solid #333; color: #ccc; }
+.dash-table th { color: var(--accent); font-weight: 600; font-size: 11px; text-transform: uppercase; padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; }
+.dash-table td { padding: 6px 8px; border-bottom: 1px solid #333; color: var(--text); }
+.dash-table tr { cursor: pointer; }
 .dash-table tr:hover { background: #2a2d2e; }
-.dash-empty { color: #666; text-align: center; padding: 20px; font-size: 12px; }
+.dash-empty { color: #666; text-align: center; padding: 16px; font-size: 12px; }
+.dash-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.dash-action-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; display: flex; align-items: center; gap: 10px; cursor: pointer; transition: border-color .15s; text-decoration: none; color: var(--text); }
+.dash-action-card:hover { border-color: var(--accent); }
+.dash-action-card .da-icon { font-size: 18px; flex-shrink: 0; }
+.dash-action-card .da-label { font-size: 12px; font-weight: 500; }
+.dash-action-card .da-hint { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
 </style>`)
-	b.WriteString(`<div class="card"><h1>Dashboard</h1><p class="muted">Overview of your task queue</p></div>`)
+	b.WriteString(`<div class="card" style="margin-bottom:16px;"><h1>Dashboard</h1><p class="muted" style="margin:0;">Monitor your work queue and take action</p></div>`)
+	// Onboarding banner (shown only when empty)
 	b.WriteString(`<div id="seed-banner" style="display:none;background:#1e3a5f;border:1px solid #264f78;border-radius:8px;padding:20px 24px;margin-bottom:16px;">
 <div style="font-size:16px;font-weight:600;color:#56b6f7;margin-bottom:12px;">Welcome to Cocopilot</div>
 <div style="display:flex;gap:16px;flex-wrap:wrap;">
-<div id="step-1" style="flex:1;min-width:180px;background:#252526;border:1px solid #3c3c3c;border-radius:8px;padding:14px;">
-<div style="font-size:11px;color:#0078d4;font-weight:600;margin-bottom:6px;">STEP 1</div>
-<div style="font-size:13px;color:#ccc;margin-bottom:8px;">Seed sample tasks</div>
-<div style="font-size:11px;color:#858585;margin-bottom:10px;">Creates 5 example tasks with dependencies so you can explore the board.</div>
-<button onclick="seedDemo()" style="background:#0078d4;color:#fff;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:12px;">Seed Demo Data</button>
+<div id="step-1" style="flex:1;min-width:180px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;">
+<div style="font-size:11px;color:var(--accent);font-weight:600;margin-bottom:6px;">STEP 1</div>
+<div style="font-size:13px;color:var(--text);margin-bottom:8px;">Seed sample tasks</div>
+<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Creates 5 example tasks with dependencies.</div>
+<button onclick="seedDemo()" class="btn btn-primary" style="font-size:12px;">Seed Demo Data</button>
 </div>
-<div id="step-2" style="flex:1;min-width:180px;background:#252526;border:1px solid #3c3c3c;border-radius:8px;padding:14px;opacity:0.5;">
-<div style="font-size:11px;color:#0078d4;font-weight:600;margin-bottom:6px;">STEP 2</div>
-<div style="font-size:13px;color:#ccc;margin-bottom:8px;">Start the built-in worker</div>
-<div style="font-size:11px;color:#858585;margin-bottom:10px;">Run this in a second terminal to process tasks automatically:</div>
-<code style="display:block;background:#1e1e1e;border:1px solid #3c3c3c;border-radius:4px;padding:6px 10px;font-size:11px;color:#89d185;word-break:break-all;">go run ./cmd/cocopilot worker proj_default</code>
+<div id="step-2" style="flex:1;min-width:180px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;opacity:0.5;">
+<div style="font-size:11px;color:var(--accent);font-weight:600;margin-bottom:6px;">STEP 2</div>
+<div style="font-size:13px;color:var(--text);margin-bottom:8px;">Start the built-in worker</div>
+<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Run in a second terminal:</div>
+<code style="display:block;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:6px 10px;font-size:11px;color:var(--success);word-break:break-all;">go run ./cmd/cocopilot worker proj_default</code>
 </div>
-<div id="step-3" style="flex:1;min-width:180px;background:#252526;border:1px solid #3c3c3c;border-radius:8px;padding:14px;opacity:0.5;">
-<div style="font-size:11px;color:#0078d4;font-weight:600;margin-bottom:6px;">STEP 3</div>
-<div style="font-size:13px;color:#ccc;margin-bottom:8px;">Watch the board</div>
-<div style="font-size:11px;color:#858585;">Open the <a href="/board" style="color:#0078d4;">Board</a> to see tasks move through To Do → In Progress → Done in real time.</div>
+<div id="step-3" style="flex:1;min-width:180px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;opacity:0.5;">
+<div style="font-size:11px;color:var(--accent);font-weight:600;margin-bottom:6px;">STEP 3</div>
+<div style="font-size:13px;color:var(--text);margin-bottom:8px;">Watch the board</div>
+<div style="font-size:11px;color:var(--text-muted);">Open the <a href="/board" style="color:var(--accent);">Work Queue</a> to see tasks move in real time.</div>
 </div>
 </div>
 </div>`)
-	b.WriteString(`<div id="dash-app">
-<div class="dash-grid" id="dash-stats"></div>
+	// Quick actions bar (contextual, shown based on state)
+	b.WriteString(`<div id="dash-actions" class="dash-actions" style="display:none;"></div>`)
+	// Stats grid
+	b.WriteString(`<div class="dash-grid" id="dash-stats"><div class="dash-empty">Loading...</div></div>`)
+	// Main content
+	b.WriteString(`<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
 <div class="dash-section">
-<h2>Recent Activity</h2>
-<table class="dash-table"><thead><tr><th>Task</th><th>Status</th><th>Agent</th><th>Updated</th></tr></thead>
-<tbody id="dash-recent"><tr><td colspan="4" class="dash-empty">Loading...</td></tr></tbody></table>
+<h2>Needs Attention <a href="/board">View queue &rarr;</a></h2>
+<table class="dash-table"><thead><tr><th>Task</th><th>Status</th><th>Updated</th></tr></thead>
+<tbody id="dash-attention"><tr><td colspan="3" class="dash-empty">Loading...</td></tr></tbody></table>
 </div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
 <div class="dash-section">
-<h2>Active Agents</h2>
+<h2>Connected Agents <a href="/agents">View all &rarr;</a></h2>
 <div id="dash-agents" class="dash-empty">Loading...</div>
 </div>
-<div class="dash-section">
-<h2>Failed Tasks</h2>
-<table class="dash-table"><thead><tr><th>ID</th><th>Title</th><th>Updated</th></tr></thead>
-<tbody id="dash-failed"><tr><td colspan="3" class="dash-empty">Loading...</td></tr></tbody></table>
-</div>
-</div>
+</div>`)
+	b.WriteString(`<div class="dash-section">
+<h2>Recent Activity <a href="/events-browser">Events &rarr;</a></h2>
+<table class="dash-table"><thead><tr><th>Task</th><th>Status</th><th>Agent</th><th>Updated</th></tr></thead>
+<tbody id="dash-recent"><tr><td colspan="4" class="dash-empty">Loading...</td></tr></tbody></table>
 </div>`)
 	b.WriteString(`<script>`)
 	b.WriteString(`async function loadDashboard(){try{`)
@@ -100,7 +115,7 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString(`const tasksData=tasksRes.ok?await tasksRes.json():{tasks:[]};const agentsData=agentsRes.ok?await agentsRes.json():{agents:[]};`)
 	b.WriteString(`const tasks=Array.isArray(tasksData.tasks)?tasksData.tasks:[];const agents=Array.isArray(agentsData.agents)?agentsData.agents:[];`)
 	b.WriteString(`document.getElementById('seed-banner').style.display=tasks.length===0?'':'none';`)
-	// Stats
+	// Stats (clickable)
 	b.WriteString(`const todo=tasks.filter(t=>t.status==='TODO'||t.status==='PENDING').length;`)
 	b.WriteString(`const inProg=tasks.filter(t=>t.status==='IN_PROGRESS').length;`)
 	b.WriteString(`const done=tasks.filter(t=>t.status==='DONE'||t.status==='COMPLETED').length;`)
@@ -108,33 +123,39 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString(`const blocked=tasks.filter(t=>t.is_blocked).length;`)
 	b.WriteString(`const onlineAgents=agents.filter(a=>a.status==='ONLINE'||a.status==='active').length;`)
 	b.WriteString(`document.getElementById('dash-stats').innerHTML=`)
-	b.WriteString(`'<div class="dash-card info"><div class="dc-label">Queued</div><div class="dc-value">'+todo+'</div></div>'`)
-	b.WriteString(`+'<div class="dash-card warn"><div class="dc-label">In Progress</div><div class="dc-value">'+inProg+'</div></div>'`)
-	b.WriteString(`+'<div class="dash-card ok"><div class="dc-label">Completed</div><div class="dc-value">'+done+'</div></div>'`)
-	b.WriteString(`+'<div class="dash-card error"><div class="dc-label">Failed</div><div class="dc-value">'+failed+'</div></div>'`)
-	b.WriteString(`+'<div class="dash-card'+(blocked>0?' warn':'')+'" ><div class="dc-label">Blocked</div><div class="dc-value">'+blocked+'</div></div>'`)
-	b.WriteString(`+'<div class="dash-card info"><div class="dc-label">Agents Online</div><div class="dc-value">'+onlineAgents+'/'+agents.length+'</div></div>';`)
+	b.WriteString(`'<div class="dash-card info" onclick="location.href=\\'/board\\'"><div class="dc-label">Queued</div><div class="dc-value">'+todo+'</div><div class="dc-action">Open queue</div></div>'`)
+	b.WriteString(`+'<div class="dash-card warn" onclick="location.href=\\'/board\\'"><div class="dc-label">In Progress</div><div class="dc-value">'+inProg+'</div><div class="dc-action">View active</div></div>'`)
+	b.WriteString(`+'<div class="dash-card ok" onclick="location.href=\\'/board\\'"><div class="dc-label">Completed</div><div class="dc-value">'+done+'</div><div class="dc-action">View completed</div></div>'`)
+	b.WriteString(`+'<div class="dash-card'+(failed>0?' error':'')+'" onclick="location.href=\\'/board\\'"><div class="dc-label">Failed</div><div class="dc-value">'+failed+'</div>'+(failed>0?'<div class="dc-action">Review failures</div>':'')+'</div>'`)
+	b.WriteString(`+'<div class="dash-card'+(blocked>0?' warn':'')+'" onclick="location.href=\\'/dependencies\\'"><div class="dc-label">Blocked</div><div class="dc-value">'+blocked+'</div>'+(blocked>0?'<div class="dc-action">Unblock</div>':'')+'</div>'`)
+	b.WriteString(`+'<div class="dash-card'+(onlineAgents>0?' ok':'')+ '" onclick="location.href=\\'/agents\\'"><div class="dc-label">Agents</div><div class="dc-value">'+onlineAgents+'/'+agents.length+'</div><div class="dc-action">Manage agents</div></div>';`)
+	// Contextual quick actions
+	b.WriteString(`const actionsEl=document.getElementById('dash-actions');const acts=[];`)
+	b.WriteString(`if(failed>0)acts.push('<a class="dash-action-card" href="/board"><span class="da-icon">&#9888;</span><div><div class="da-label">'+failed+' failed task'+(failed>1?'s':'')+'</div><div class="da-hint">Review and retry</div></div></a>');`)
+	b.WriteString(`if(onlineAgents===0&&tasks.length>0)acts.push('<a class="dash-action-card" href="/agents"><span class="da-icon">&#9881;</span><div><div class="da-label">No agents connected</div><div class="da-hint">Start a worker to process queued tasks</div></div></a>');`)
+	b.WriteString(`if(blocked>0)acts.push('<a class="dash-action-card" href="/dependencies"><span class="da-icon">&#128279;</span><div><div class="da-label">'+blocked+' blocked task'+(blocked>1?'s':'')+'</div><div class="da-hint">Check dependency status</div></div></a>');`)
+	b.WriteString(`if(acts.length>0){actionsEl.innerHTML=acts.join('');actionsEl.style.display='';}else{actionsEl.style.display='none';}`)
+	// Needs attention: failed + blocked + stale
+	b.WriteString(`const attention=tasks.filter(t=>t.status==='FAILED'||t.is_blocked).sort((a,b)=>(b.updated_at||'').localeCompare(a.updated_at||'')).slice(0,5);`)
+	b.WriteString(`const attnBody=document.getElementById('dash-attention');`)
+	b.WriteString(`if(attention.length===0){attnBody.innerHTML='<tr><td colspan="3" class="dash-empty" style="color:var(--success);">Nothing needs attention</td></tr>';}else{`)
+	b.WriteString(`attnBody.innerHTML='';attention.forEach(t=>{const tr=document.createElement('tr');tr.onclick=()=>location.href='/board?task='+t.id;`)
+	b.WriteString(`tr.innerHTML='<td>#'+t.id+' '+escapeHtml(t.title||'')+'</td><td>'+statusBadge(t.status_v2||t.status)+'</td><td>'+formatAgo(t.updated_at)+'</td>';`)
+	b.WriteString(`attnBody.appendChild(tr);});}`)
 	// Recent tasks
-	b.WriteString(`const sorted=[...tasks].sort((a,b)=>(b.updated_at||b.created_at||'').localeCompare(a.updated_at||a.created_at||'')).slice(0,10);`)
+	b.WriteString(`const sorted=[...tasks].sort((a,b)=>(b.updated_at||b.created_at||'').localeCompare(a.updated_at||a.created_at||'')).slice(0,8);`)
 	b.WriteString(`const tbody=document.getElementById('dash-recent');`)
-	b.WriteString(`if(sorted.length===0){tbody.innerHTML='<tr><td colspan="4" class="dash-empty">No tasks yet</td></tr>';}else{`)
-	b.WriteString(`tbody.innerHTML='';sorted.forEach(t=>{const tr=document.createElement('tr');`)
-	b.WriteString(`tr.innerHTML='<td>#'+t.id+' '+escapeHtml(t.title||'')+'</td><td>'+escapeHtml(t.status)+'</td><td>'+escapeHtml(t.agent_id||'—')+'</td><td>'+(t.updated_at?new Date(t.updated_at).toLocaleString():'—')+'</td>';`)
+	b.WriteString(`if(sorted.length===0){tbody.innerHTML='<tr><td colspan="4" class="dash-empty">No activity yet</td></tr>';}else{`)
+	b.WriteString(`tbody.innerHTML='';sorted.forEach(t=>{const tr=document.createElement('tr');tr.onclick=()=>location.href='/board?task='+t.id;`)
+	b.WriteString(`tr.innerHTML='<td>#'+t.id+' '+escapeHtml(t.title||'')+'</td><td>'+statusBadge(t.status_v2||t.status)+'</td><td>'+escapeHtml(t.agent_id||'—')+'</td><td>'+formatAgo(t.updated_at)+'</td>';`)
 	b.WriteString(`tbody.appendChild(tr);});}`)
-	// Active agents
+	// Agents
 	b.WriteString(`const agentsDiv=document.getElementById('dash-agents');`)
-	b.WriteString(`if(agents.length===0){agentsDiv.innerHTML='<div class="dash-empty">No agents connected</div>';}else{`)
-	b.WriteString(`agentsDiv.innerHTML='';agents.forEach(a=>{const d=document.createElement('div');`)
-	b.WriteString(`d.style.cssText='display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #333;font-size:12px;';`)
-	b.WriteString(`d.innerHTML='<span>'+escapeHtml(a.name||a.id)+'</span><span style="color:'+(a.status==='ONLINE'||a.status==='active'?'#89d185':'#858585')+'">'+escapeHtml(a.status)+'</span>';`)
+	b.WriteString(`if(agents.length===0){agentsDiv.innerHTML='<div class="dash-empty">No agents connected.<br><span style="font-size:11px;color:#666;">Start a worker or connect an agent to begin.</span></div>';}else{`)
+	b.WriteString(`agentsDiv.innerHTML='';agents.forEach(a=>{const d=document.createElement('div');d.onclick=()=>location.href='/agents?id='+encodeURIComponent(a.id);`)
+	b.WriteString(`d.style.cssText='display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #333;font-size:12px;cursor:pointer;';`)
+	b.WriteString(`d.innerHTML='<span>'+escapeHtml(a.name||a.id)+'</span><span>'+statusBadge(a.status)+'</span>';`)
 	b.WriteString(`agentsDiv.appendChild(d);});}`)
-	// Failed tasks
-	b.WriteString(`const failedTasks=tasks.filter(t=>t.status==='FAILED').slice(0,5);`)
-	b.WriteString(`const ftbody=document.getElementById('dash-failed');`)
-	b.WriteString(`if(failedTasks.length===0){ftbody.innerHTML='<tr><td colspan="3" class="dash-empty">No failed tasks</td></tr>';}else{`)
-	b.WriteString(`ftbody.innerHTML='';failedTasks.forEach(t=>{const tr=document.createElement('tr');`)
-	b.WriteString(`tr.innerHTML='<td>#'+t.id+'</td><td>'+escapeHtml(t.title||'(untitled)')+'</td><td>'+(t.updated_at?new Date(t.updated_at).toLocaleString():'—')+'</td>';`)
-	b.WriteString(`ftbody.appendChild(tr);});}`)
 	b.WriteString(`}catch(e){document.getElementById('dash-stats').innerHTML='<div class="dash-card error"><div class="dc-label">Error</div><div class="dc-value">!</div></div>';}}`)
 	b.WriteString(`loadDashboard();setInterval(loadDashboard,15000);`)
 	b.WriteString(`async function seedDemo(){try{const res=await fetch('/api/v2/seed-demo',{method:'POST'});`)
@@ -145,77 +166,21 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, b.String())
 }
 
-// subPageHead returns a consistent HTML head + nav bar for all sub-pages,
-// matching the Kanban's VSCode-inspired dark theme.
+// subPageHead returns a consistent HTML head + nav bar for all sub-pages.
+// Uses the shared UI framework from ui_framework.go.
 func subPageHead(title string) string {
 	return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">` +
 		`<meta name="viewport" content="width=device-width, initial-scale=1.0">` +
 		`<title>` + html.EscapeString(title) + ` - Cocopilot</title>` +
-		`<style>` +
-		`:root{--vscode-bg:#1e1e1e;--vscode-sidebar:#252526;--vscode-input-bg:#3c3c3c;--vscode-border:#3c3c3c;--vscode-text:#cccccc;--vscode-text-muted:#858585;--vscode-descriptionForeground:#858585;--vscode-accent:#0078d4;--vscode-accent-hover:#1c8ae8;--vscode-success:#89d185;--vscode-warning:#cca700;--vscode-info:#3794ff;--vscode-error:#f48771;--vscode-dropdown-bg:#313131;--vscode-charts-green:#388a34;--vscode-charts-red:#c74e39;--vscode-charts-orange:#d18616;--vscode-charts-blue:#2670b8;}` +
-		`*{box-sizing:border-box;margin:0;padding:0;}` +
-		`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:13px;background:#1e1e1e;color:#ccc;min-height:100vh;}` +
-		`.top-nav{background:#252526;border-bottom:1px solid #3c3c3c;padding:10px 20px;display:flex;align-items:center;gap:12px;}` +
-		`.top-nav .nav-icon{color:#0078d4;}` +
-		`.top-nav .nav-title{font-size:14px;font-weight:600;color:#ccc;text-decoration:none;}` +
-		`.top-nav .nav-title:hover{color:#fff;}` +
-		`.top-nav nav{display:flex;align-items:center;gap:8px;font-size:12px;}` +
-		`.top-nav nav a{color:#858585;text-decoration:none;padding:4px 6px;border-radius:4px;transition:all .15s;}` +
-		`.top-nav nav a:hover,.top-nav nav a.active{color:#ccc;background:#3c3c3c;}` +
-		`.nav-sep{color:#3c3c3c;font-size:14px;user-select:none;}` +
-		`.page-body{max-width:1100px;margin:0 auto;padding:24px 20px;}` +
-		`.card{background:#252526;border:1px solid #3c3c3c;border-radius:8px;padding:20px;}` +
-		`h1{font-size:20px;margin:0 0 6px;color:#e0e0e0;}` +
-		`h2{font-size:15px;margin:18px 0 8px;color:#e0e0e0;border-bottom:1px solid #3c3c3c;padding-bottom:6px;}` +
-		`p{margin:0 0 14px;color:#858585;font-size:13px;}` +
+		`<style>` + uiSharedCSS() +
+		// Legacy compat styles
 		`.meta{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:14px;font-size:12px;color:#b0b0b0;}` +
-		`.muted{color:#858585;}` +
-		`.btn{background:#3c3c3c;border:1px solid #505050;color:#ccc;padding:6px 10px;border-radius:4px;cursor:pointer;font-size:12px;transition:all .15s;}` +
-		`.btn:hover{background:#0078d4;border-color:#0078d4;color:#fff;}` +
-		`.btn.active{background:#505050;border-color:#606060;}` +
-		`table{width:100%;border-collapse:collapse;font-size:12px;}` +
-		`th,td{padding:8px;border-bottom:1px solid #3c3c3c;text-align:left;}` +
-		`th{color:#0078d4;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;}` +
-		`tbody tr:hover{background:#2a2d2e;}` +
-		`.field{display:flex;align-items:center;gap:6px;font-size:12px;color:#b0b0b0;}` +
-		`.input,.textarea,.select{background:#3c3c3c;border:1px solid #505050;color:#ccc;border-radius:4px;padding:6px 8px;font-size:12px;}` +
-		`.input:focus,.textarea:focus,.select:focus{border-color:#0078d4;outline:none;}` +
-		`.textarea{min-height:100px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;}` +
 		`.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px;}` +
-		`.stat{background:#1e1e1e;border:1px solid #3c3c3c;border-radius:8px;padding:12px;text-align:center;}` +
-		`.stat .label{font-size:11px;color:#858585;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;}` +
-		`.stat .value{font-size:22px;font-weight:700;color:#ccc;}` +
-		`.stat.ok .value{color:#89d185;} .stat.warn .value{color:#cca700;} .stat.error .value{color:#f14c4c;}` +
-		`.pill{background:#1e1e1e;border:1px solid #3c3c3c;border-radius:999px;padding:4px 10px;font-size:12px;}` +
-		`.footer{background:#252526;border-top:1px solid #3c3c3c;padding:10px 20px;text-align:center;font-size:12px;color:#858585;margin-top:32px;}` +
-		`.footer a{color:#0078d4;text-decoration:none;}.footer a:hover{text-decoration:underline;}` +
-		`#page-toast{position:fixed;bottom:20px;right:20px;z-index:9999;display:none;padding:10px 16px;border-radius:6px;font-size:12px;color:#ccc;background:#1e1e1e;border:1px solid #3c3c3c;box-shadow:0 4px 12px rgba(0,0,0,0.4);}` +
+		`.pill{background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:4px 10px;font-size:12px;}` +
 		`</style>` +
-		`<script>` +
-		`const escapeHtml=(v)=>String(v??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));` +
-		`function pageToast(msg,isErr){var t=document.getElementById('page-toast');if(!t){t=document.createElement('div');t.id='page-toast';document.body.appendChild(t);}t.textContent=msg;t.style.display='block';t.style.borderColor=isErr?'#f44':'#4caf50';setTimeout(function(){t.style.display='none';},3000);}` +
-		`</script>` +
+		`<script>` + uiSharedJS() + `</script>` +
 		`</head><body>` +
-		`<div class="top-nav">` +
-		`<svg class="nav-icon" width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8.5 1a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zm0 1a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11zm-2 3.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5zm0 2a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5zm0 2a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5z"/></svg>` +
-		`<a class="nav-title" href="/">Cocopilot</a>` +
-		`<nav>` +
-		`<a href="/dashboard">Dashboard</a>` +
-		`<a href="/board">Board</a>` +
-		`<a href="/runs">Runs</a>` +
-		`<a href="/agents">Agents</a>` +
-		`<a href="/repo">Repo</a>` +
-		`<a href="/events-browser">Events</a>` +
-		`<span class="nav-sep">|</span>` +
-		`<a href="/dependencies">Dependencies</a>` +
-		`<a href="/graphs/tasks">Task DAG</a>` +
-		`<a href="/memory">Memory</a>` +
-		`<a href="/policies">Policies</a>` +
-		`<a href="/context-packs">Context Packs</a>` +
-		`<a href="/audit">Audit</a>` +
-		`<a href="/settings">Settings</a>` +
-		`<a href="/health">Health</a>` +
-		`</nav></div>` +
+		pageNav() +
 		`<div class="page-body">`
 }
 
@@ -715,7 +680,7 @@ func memoryPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("<div class=\"card\">")
 	b.WriteString("<h1>Memory</h1>")
 	b.WriteString("<div class=\"row\" style=\"margin-bottom:10px;\"><label class=\"field\">Project<input class=\"input\" id=\"memory-project\" value=\"proj_default\" style=\"width:200px;\"></label></div>")
-	b.WriteString("<p>Latest memory from <span class=\"muted\" id=\"memory-endpoint\">/api/v2/projects/proj_default/memory?limit=50</span></p>")
+	b.WriteString("<p>Stored key-value pairs for the selected project</p>")
 	b.WriteString("<div class=\"meta\"><span id=\"memory-status\">Loading...</span>")
 	b.WriteString("<button class=\"btn\" id=\"memory-refresh\" type=\"button\">Refresh</button></div>")
 	b.WriteString("<form class=\"form\" id=\"memory-form\">")
@@ -739,10 +704,8 @@ func memoryPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("const valueEl=document.getElementById('memory-value');")
 	b.WriteString("const formStatusEl=document.getElementById('memory-form-status');")
 	b.WriteString("const projectEl=document.getElementById('memory-project');")
-	b.WriteString("const endpointEl=document.getElementById('memory-endpoint');")
 	b.WriteString("function getProjectID(){return String(projectEl.value||'proj_default').trim();}")
 	b.WriteString("async function loadMemory(){const pid=getProjectID();statusEl.textContent='Loading...';")
-	b.WriteString("endpointEl.textContent='/api/v2/projects/'+pid+'/memory?limit=50';")
 	b.WriteString("bodyEl.innerHTML='<tr><td colspan=\"3\">Loading...</td></tr>';try{")
 	b.WriteString("const res=await fetch('/api/v2/projects/'+encodeURIComponent(pid)+'/memory?limit=50');")
 	b.WriteString("if(!res.ok)throw new Error('http '+res.status);")
@@ -852,7 +815,7 @@ func agentsPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString(`+'<div class="agent-card-id">'+escapeHtml(agent.id)+'</div>'`)
 	b.WriteString(`+'<div class="agent-meta" style="margin-top:12px;">'`)
 	b.WriteString(`+'<div><div class="agent-meta-label">Heartbeat</div><div class="agent-meta-value">'+hb.label+'</div><div class="heartbeat-bar"><div class="heartbeat-fill '+hb.cls+'" style="width:'+hb.pct+'%"></div></div></div>'`)
-	b.WriteString(`+'<div><div class="agent-meta-label">Created</div><div class="agent-meta-value">'+(agent.created_at||agent.registered_at?new Date(agent.created_at||agent.registered_at).toLocaleString():'—')+'</div></div>'`)
+	b.WriteString(`+'<div><div class="agent-meta-label">Created</div><div class="agent-meta-value">'+formatAgo(agent.created_at||agent.registered_at)+'</div></div>'`)
 	b.WriteString(`+'<div><div class="agent-meta-label">Current Task</div><div class="agent-meta-value">'+(meta.current_task?'<a href="/board" style="color:#56b6f7;">#'+escapeHtml(meta.current_task)+'</a>':'<span style="color:#666;">idle</span>')+'</div></div>'`)
 	b.WriteString(`+'<div><div class="agent-meta-label">Current Run</div><div class="agent-meta-value">'+(meta.current_run?'<a href="/runs" style="color:#56b6f7;">'+escapeHtml(String(meta.current_run).substring(0,12))+'</a>':'<span style="color:#666;">—</span>')+'</div></div>'`)
 	b.WriteString(`+'<div><div class="agent-meta-label">Tasks Done</div><div class="agent-meta-value" style="color:#73c991;">'+(meta.completed_count||'0')+'</div></div>'`)
@@ -1058,8 +1021,8 @@ func healthDashboardHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("<div class=\"status-bar\" id=\"task-bar\"></div>")
 	b.WriteString("<h2>System Info</h2>")
 	b.WriteString("<table><tbody id=\"sys-info\"><tr><td>Loading...</td></tr></tbody></table>")
-	b.WriteString("<h2>Endpoint Audit</h2>")
-	b.WriteString("<table><thead><tr><th>Check</th><th>Endpoint</th><th>Result</th><th>Latency</th></tr></thead>")
+	b.WriteString("<h2>Health Checks</h2>")
+	b.WriteString("<table><thead><tr><th>Check</th><th>Service</th><th>Result</th><th>Latency</th></tr></thead>")
 	b.WriteString("<tbody id=\"audit-body\"><tr><td colspan=\"4\">Running checks...</td></tr></tbody></table>")
 	b.WriteString("</div>")
 	b.WriteString("<script>")
@@ -1332,7 +1295,7 @@ func runsPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 		b.WriteString("</style>")
 		b.WriteString("<div class=\"card\">")
 		b.WriteString("<h1>Runs</h1>")
-		b.WriteString("<p>Enter a run ID to open the run viewer, or browse recent runs below.</p>")
+		b.WriteString("<p>Look up a run by ID or browse recent activity below.</p>")
 		b.WriteString("<form id=\"run-lookup\" autocomplete=\"off\">")
 		b.WriteString("<label for=\"run-id\">Run ID</label>")
 		b.WriteString("<div class=\"row\">")
@@ -1498,7 +1461,7 @@ const htmlTemplate = `
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Cocopilot - Kanban</title>
+        <title>Cocopilot - Work Queue</title>
         <script defer src="/static/alpine-collapse.min.js"></script>
         <script defer src="/static/alpine.min.js"></script>
         <style>
@@ -2263,18 +2226,16 @@ const htmlTemplate = `
                     <dl class="drawer-meta">
                         <dt>ID</dt><dd x-text="selectedTask ? selectedTask.id : ''"></dd>
                         <dt>Title</dt><dd x-text="selectedTask ? (selectedTask.title || '—') : ''"></dd>
-                        <dt>Status</dt><dd x-text="selectedTask ? selectedTask.status : ''"></dd>
-                        <dt>Status v2</dt><dd x-text="selectedTask ? (selectedTask.status_v2 || selectedTask.status) : ''"></dd>
-                        <dt>Created</dt><dd x-text="selectedTask ? selectedTask.created_at : ''"></dd>
-                        <dt>Updated</dt><dd x-text="selectedTask ? (selectedTask.updated_at || '—') : ''"></dd>
-                        <dt>Parent</dt><dd x-text="selectedTask && selectedTask.parent_task_id ? '#' + selectedTask.parent_task_id : '—'"></dd>
+                        <dt>Status</dt><dd x-html="selectedTask ? stsBadge(selectedTask.status_v2 || selectedTask.status) : ''"></dd>
+                        <dt>Created</dt><dd><span x-text="selectedTask ? fmtAgo(selectedTask.created_at) : ''" :title="selectedTask ? selectedTask.created_at : ''"></span></dd>
+                        <dt>Updated</dt><dd><span x-text="selectedTask ? fmtAgo(selectedTask.updated_at) : '—'" :title="selectedTask ? (selectedTask.updated_at || '') : ''"></span></dd>
+                        <dt>Parent</dt><dd x-html="selectedTask && selectedTask.parent_task_id ? entityLink('/board?task='+selectedTask.parent_task_id, '#'+selectedTask.parent_task_id) : '—'"></dd>
                         <dt>Priority</dt><dd x-text="selectedTask ? (selectedTask.priority || 50) : ''"></dd>
                         <dt>Type</dt><dd x-text="selectedTask ? (selectedTask.type || '—') : ''"></dd>
-                        <dt>Agent</dt><dd x-text="selectedTask ? (selectedTask.agent_id || '—') : ''"></dd>
+                        <dt>Agent</dt><dd x-html="selectedTask && selectedTask.agent_id ? entityLink('/agents?id='+encodeURIComponent(selectedTask.agent_id), selectedTask.agent_id.substring(0,20)) : '—'"></dd>
                         <dt>Tags</dt><dd x-text="selectedTask && selectedTask.tags ? selectedTask.tags.join(', ') : '—'"></dd>
-                        <dt>Approval</dt><dd x-text="selectedTask && selectedTask.requires_approval ? 'Required' : 'Not required'"></dd>
-                        <dt>Dependencies</dt><dd x-text="selectedTask && selectedTask.dependency_count ? selectedTask.dependency_count + ' dependencies' : 'None'"></dd>
-                        <dt>Blocked</dt><dd x-text="selectedTask && selectedTask.blocked ? 'Yes' : 'No'"></dd>
+                        <dt>Blocked</dt><dd x-html="selectedTask && selectedTask.blocked ? stsBadge('BLOCKED') : '—'"></dd>
+                        <dt>Dependencies</dt><dd x-html="selectedTask && selectedTask.dependency_count ? entityLink('/dependencies?task='+selectedTask.id, selectedTask.dependency_count+' dep'+(selectedTask.dependency_count>1?'s':'')) : '—'"></dd>
                     </dl>
                 </div>
                 <div class="drawer-section">
@@ -2285,6 +2246,41 @@ const htmlTemplate = `
                         <button class="danger" @click="failSelectedTask" x-show="selectedTask && selectedTask.status === 'IN_PROGRESS'">Fail</button>
                         <button @click="duplicateSelectedTask">Duplicate</button>
                         <button class="danger" @click="deleteTask(selectedTask.id); selectedTask = null">Delete</button>
+                    </div>
+                </div>
+                <div class="drawer-section">
+                    <h3>Related</h3>
+                    <div style="font-size:12px;display:flex;flex-direction:column;gap:6px;">
+                        <template x-if="selectedTask && tasks.filter(t => t.parent_task_id === selectedTask.id).length > 0">
+                            <div>
+                                <div style="color:var(--vscode-text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px;">Child Tasks</div>
+                                <template x-for="child in tasks.filter(t => t.parent_task_id === selectedTask.id)" :key="child.id">
+                                    <div style="display:flex;align-items:center;gap:6px;padding:2px 0;">
+                                        <a :href="'/board?task='+child.id" style="color:var(--vscode-accent);text-decoration:none;font-size:12px;" @click.prevent="selectedTask = child" x-text="'#'+child.id"></a>
+                                        <span x-text="child.title || child.instructions?.substring(0,30)+'...' || ''" style="color:var(--vscode-text-muted);"></span>
+                                        <span x-html="stsBadge(child.status_v2 || child.status)" style="margin-left:auto;"></span>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                        <template x-if="selectedTask && selectedTask.parent_task_id">
+                            <div>
+                                <div style="color:var(--vscode-text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px;">Parent</div>
+                                <div style="display:flex;align-items:center;gap:6px;">
+                                    <a :href="'/board?task='+selectedTask.parent_task_id" style="color:var(--vscode-accent);text-decoration:none;" @click.prevent="selectedTask = tasks.find(t => t.id === selectedTask.parent_task_id) || selectedTask" x-text="'#'+selectedTask.parent_task_id"></a>
+                                    <span x-text="(tasks.find(t => t.id === selectedTask.parent_task_id) || {}).title || ''" style="color:var(--vscode-text-muted);"></span>
+                                </div>
+                            </div>
+                        </template>
+                        <template x-if="selectedTask && selectedTask.agent_id">
+                            <div>
+                                <div style="color:var(--vscode-text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px;">Assigned Agent</div>
+                                <a :href="'/agents?id='+encodeURIComponent(selectedTask.agent_id)" style="color:var(--vscode-accent);text-decoration:none;font-size:12px;" x-text="selectedTask.agent_id.substring(0,24)"></a>
+                            </div>
+                        </template>
+                        <template x-if="selectedTask && !tasks.filter(t => t.parent_task_id === selectedTask?.id).length && !selectedTask.parent_task_id && !selectedTask.agent_id">
+                            <div style="color:var(--vscode-text-muted);font-style:italic;">No related entities</div>
+                        </template>
                     </div>
                 </div>
                 <div class="drawer-section">
@@ -2454,22 +2450,21 @@ const htmlTemplate = `
             <span class="header-title">Cocopilot</span>
             <nav class="header-nav" aria-label="Primary">
                 <a href="/dashboard">Dashboard</a>
-                <a href="/board">Board</a>
+                <a href="/board" class="active">Work Queue</a>
                 <a href="/runs">Runs</a>
                 <a href="/agents">Agents</a>
                 <a href="/repo">Repo</a>
+                <a href="/events-browser">Events</a>
+                <a href="/settings">Settings</a>
                 <div class="nav-more" x-data="{ open: false }" @click.outside="open = false">
-                    <button class="nav-more-btn" @click="open = !open">More ▾</button>
+                    <button class="nav-more-btn" @click="open = !open">More &#9662;</button>
                     <div class="nav-more-dropdown" x-show="open" x-cloak @click="open = false">
+                        <a href="/graphs/tasks">Task Graph</a>
+                        <a href="/dependencies">Dependencies</a>
                         <a href="/memory">Memory</a>
                         <a href="/policies">Policies</a>
-                        <a href="/dependencies">Dependencies</a>
                         <a href="/context-packs">Context Packs</a>
-                        <a href="/events-browser">Events</a>
-                        <a href="/graphs/tasks">Task DAG</a>
-                        <a href="/graphs/repo">Repo Graph</a>
-                        <a href="/audit">Audit</a>
-                        <a href="/settings">Settings</a>
+                        <a href="/audit">Audit Log</a>
                         <a href="/health">Health</a>
                     </div>
                 </div>
@@ -2498,8 +2493,8 @@ const htmlTemplate = `
                                     <span :class="'status-badge status-' + agent.status.toLowerCase()" x-text="agent.status" style="font-size: 10px; padding: 2px 6px; border-radius: 10px; font-weight: 500;"></span>
                                 </div>
                             </template>
-                            <div x-show="agents.length === 0" style="padding: 12px; text-align: center; color: var(--vscode-text-muted); font-size: 12px;">
-                                No agents registered
+                            <div style="padding: 12px; text-align: center; color: var(--vscode-text-muted); font-size: 12px;">
+                                No agents connected
                             </div>
                         </div>
                     </div>
@@ -2627,7 +2622,7 @@ const htmlTemplate = `
                              @dragstart="startDrag(task)"
                              @dragend="endDrag"
                              @dblclick="selectedTask = task">
-                            <div class="card-header" @click="toggleExpand(task.id)">
+                            <div class="card-header" @click="selectedTask = task">
                                 <div class="card-left">
                                     <span class="card-id" x-text="'#' + task.id"></span>
                                     <span class="parent-badge" x-show="task.parent_task_id">
@@ -2667,7 +2662,7 @@ const htmlTemplate = `
                         </div>
                     </template>
                     <div class="empty-column" x-show="todoTasks.length === 0">
-                        <p style="color:var(--vscode-text-muted);margin-bottom:8px;">No tasks in queue</p>
+                        <p style="color:var(--vscode-text-muted);margin-bottom:8px;">Queue is empty</p>
                         <button class="btn btn-primary" @click="openModal" style="font-size:11px;padding:4px 12px;">+ Create Task</button>
                     </div>
                 </div>
@@ -2697,7 +2692,7 @@ const htmlTemplate = `
                              @dragstart="startDrag(task)"
                              @dragend="endDrag"
                              @dblclick="selectedTask = task">
-                            <div class="card-header" @click="toggleExpand(task.id)">
+                            <div class="card-header" @click="selectedTask = task">
                                 <div class="card-left">
                                     <span class="card-id" x-text="'#' + task.id"></span>
                                     <span class="parent-badge" x-show="task.parent_task_id">
@@ -2765,7 +2760,7 @@ const htmlTemplate = `
                              @dragstart="startDrag(task)"
                              @dragend="endDrag"
                              @dblclick="selectedTask = task">
-                            <div class="card-header" @click="toggleExpand(task.id)">
+                            <div class="card-header" @click="selectedTask = task">
                                 <div class="card-left">
                                     <span class="card-id" x-text="'#' + task.id"></span>
                                     <span class="parent-badge" x-show="task.parent_task_id">
@@ -2817,6 +2812,10 @@ const htmlTemplate = `
         </footer>
 
         <script>
+            // Shared helpers for entity rendering
+            function fmtAgo(iso){if(!iso)return '—';const s=Math.floor((Date.now()-new Date(iso))/1000);if(s<60)return s+'s ago';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return new Date(iso).toLocaleDateString();}
+            function stsBadge(s){const m={SUCCEEDED:'ok',COMPLETED:'ok',DONE:'ok',FAILED:'error',CANCELLED:'warn',QUEUED:'info',CLAIMED:'warn',RUNNING:'warn',IN_PROGRESS:'warn',TODO:'info',PENDING:'info',NEEDS_REVIEW:'warn'};const c=m[s]||'muted';return '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;background:'+(c==='ok'?'#1a3a1a':c==='error'?'#3a1919':c==='warn'?'#3a3519':c==='info'?'#19293a':'var(--vscode-input-bg)')+';color:var(--vscode-'+(c==='ok'?'success':c==='error'?'error':c==='warn'?'warning':c==='info'?'info':'text-muted')+');border:1px solid '+(c==='ok'?'#2d5a2d':c==='error'?'#5a2525':c==='warn'?'#5a5325':c==='info'?'#254a6e':'var(--vscode-border)')+';">'+((s||'').replace(/[<>&"']/g,''))+'</span>';}
+            function entityLink(href,label){return '<a href="'+href+'" style="color:var(--vscode-accent);text-decoration:none;font-size:12px;" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">'+((label||'').replace(/[<>&"']/g,''))+'</a>';}
             function kanbanApp() {
                 return {
                     tasks: [],
