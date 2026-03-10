@@ -105,42 +105,13 @@ func uiSharedCSS() string {
 }
 
 // uiSharedJS returns client-side JavaScript helpers shared by all pages.
+// Most helpers (escapeHtml, pageToast, cocoAPI, formatAgo, formatTime,
+// renderEmpty/Loading/Error, statusBadge, entity links, cocoForm, cocoStatus,
+// cocoProject, cocoLive) are defined in /static/js/coco.js which is loaded
+// via <script> in both pageShell() and subPageHead(). This function is now
+// intentionally empty — kept as a hook for future inline-only helpers.
 func uiSharedJS() string {
-	return `const escapeHtml=(v)=>String(v??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));` +
-		// Toast
-		`function pageToast(msg,type){var t=document.getElementById('page-toast');if(!t){t=document.createElement('div');t.id='page-toast';document.body.appendChild(t);}t.textContent=msg;t.style.display='block';t.style.borderColor=type==='error'?'var(--error)':type==='warn'?'var(--warning)':'var(--success)';setTimeout(()=>{t.style.display='none';},3000);}` +
-		// Shared API helper
-		`const cocoAPI={` +
-		`async get(url){const r=await fetch(url);if(!r.ok)throw new Error(r.status+' '+r.statusText);return r.json();},` +
-		`async post(url,body){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||r.statusText);}return r.json();},` +
-		`async del(url){const r=await fetch(url,{method:'DELETE'});if(!r.ok)throw new Error(r.statusText);return r.json().catch(()=>({}));},` +
-		`};` +
-		// Timestamp formatting
-		`function formatAgo(iso){if(!iso)return '—';const d=new Date(iso),s=Math.floor((Date.now()-d)/1000);if(s<60)return s+'s ago';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return d.toLocaleDateString();}` +
-		`function formatTime(iso){if(!iso)return '—';return new Date(iso).toLocaleString();}` +
-		// State renderers
-		`function renderEmpty(el,icon,msg,hint,action){` +
-		`el.innerHTML='<div class="state-empty">'+(icon?'<div class="state-icon">'+icon+'</div>':'')+` +
-		`'<div class="state-msg">'+escapeHtml(msg)+'</div>'+(hint?'<div class="state-hint">'+hint+'</div>':'')+(action||'')+'</div>';}` +
-		`function renderLoading(el){el.innerHTML='<div class="state-loading">Loading\u2026</div>';}` +
-		`function renderError(el,err){el.innerHTML='<div class="state-error">'+escapeHtml(err)+'</div>';}` +
-		// Status badge helper
-		`function statusBadge(status){const m={SUCCEEDED:'ok',COMPLETED:'ok',DONE:'ok',ONLINE:'ok',FAILED:'error',CANCELLED:'warn',QUEUED:'info',CLAIMED:'warn',RUNNING:'warn',IN_PROGRESS:'warn',TODO:'info',PENDING:'info'};` +
-		`const cls=m[status]||'muted';return '<span class="badge badge-'+cls+'">'+escapeHtml(status)+'</span>';}` +
-		// Entity link builder
-		`function taskLink(id,label){return '<a class="entity-link" href="/board?task='+id+'">#'+id+(label?' '+escapeHtml(label):'')+'</a>';}` +
-		`function runLink(id){return '<a class="entity-link" href="/runs/'+encodeURIComponent(id)+'">'+escapeHtml(id.substring(0,12))+'</a>';}` +
-		`function agentLink(id,name){return '<a class="entity-link" href="/agents?id='+encodeURIComponent(id)+'">'+escapeHtml(name||id.substring(0,16))+'</a>';}` +
-		// Active nav highlighting
-		`(function(){const path=location.pathname;document.querySelectorAll('.top-nav nav a').forEach(a=>{if(a.getAttribute('href')===path)a.classList.add('active');});}());` +
-		// Shared form field renderer
-		`const cocoForm={` +
-		`text(id,label,opts){opts=opts||{};return '<div class="field-stack"><label for="'+id+'">'+escapeHtml(label)+'</label><input class="input" id="'+id+'" name="'+id+'"'+(opts.placeholder?' placeholder="'+escapeHtml(opts.placeholder)+'"':'')+(opts.required?' required':'')+(opts.value?' value="'+escapeHtml(opts.value)+'"':'')+' type="'+(opts.type||'text')+'"></div>';},` +
-		`select(id,label,options,opts){opts=opts||{};let h='<div class="field-stack"><label for="'+id+'">'+escapeHtml(label)+'</label><select class="select" id="'+id+'" name="'+id+'"'+(opts.required?' required':'')+'>';options.forEach(o=>{const v=typeof o==='string'?o:o.value;const t=typeof o==='string'?o:o.label;h+='<option value="'+escapeHtml(v)+'"'+(opts.selected===v?' selected':'')+'>'+escapeHtml(t)+'</option>';});h+='</select></div>';return h;},` +
-		`textarea(id,label,opts){opts=opts||{};return '<div class="field-stack"><label for="'+id+'">'+escapeHtml(label)+'</label><textarea class="textarea" id="'+id+'" name="'+id+'"'+(opts.placeholder?' placeholder="'+escapeHtml(opts.placeholder)+'"':'')+(opts.required?' required':'')+'>'+(opts.value?escapeHtml(opts.value):'')+'</textarea></div>';},` +
-		`toggle(id,label,checked){return '<div class="field" style="gap:8px;"><input type="checkbox" id="'+id+'" name="'+id+'"'+(checked?' checked':'')+' style="accent-color:var(--accent);"><label for="'+id+'" style="cursor:pointer;">'+escapeHtml(label)+'</label></div>';},` +
-		`row(...fields){return '<div class="toolbar" style="align-items:end;">'+fields.join('')+'</div>';},` +
-		`};`
+	return ""
 }
 
 // pageNav returns the top navigation bar with primary/secondary grouping.

@@ -5,6 +5,7 @@
 *.so
 *.dylib
 /cocopilot
+/codegen
 task-queue
 task-server
 theinf-loop
@@ -67,6 +68,8 @@ service-account*.json
 
 # Build output
 /bin/
-/dist/
+**/dist/
+**/out/
+*.vsix
 
 ./claude/*

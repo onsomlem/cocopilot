@@ -108,6 +108,23 @@ Then add to `.vscode/mcp.json`:
 | `COCO_API_KEY` | — | Shared API key |
 | `COCO_NO_BROWSER` | `false` | Suppress auto-open browser |
 
+## Validation
+
+### Run tests
+
+```bash
+go test ./...                    # all tests
+go test -run TestGoldenPath ./server/  # golden path lifecycle tests
+go test -run TestSmoke ./server/       # UI & route smoke tests
+```
+
+### Verify repo hygiene
+
+```bash
+make verify-repo     # no binaries, .vsix, node_modules in git index
+make verify-release  # check a release zip for leaking artifacts
+```
+
 ## Next Steps
 
 - [Full Setup Guide](full-setup-guide.md) — MCP, VSIX, Docker, production deployment

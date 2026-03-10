@@ -107,6 +107,12 @@ verify-release: ## Validate release zip is clean
 	if find "$$VERIFY_DIR" -name "coverage.out" | grep -q .; then \
 		echo "FAIL: coverage.out found in release"; FAILED=1; \
 	fi && \
+	if find "$$VERIFY_DIR" -type d -name "node_modules" | grep -q .; then \
+		echo "FAIL: node_modules found in release"; FAILED=1; \
+	fi && \
+	if find "$$VERIFY_DIR" -name "*.vsix" | grep -q .; then \
+		echo "FAIL: .vsix binaries found in release"; FAILED=1; \
+	fi && \
 	FILE_COUNT=$$(find "$$VERIFY_DIR" -type f | wc -l | tr -d ' ') && \
 	ZIP_SIZE=$$(du -sh $(BUILD_DIR)/cocopilot-release.zip | cut -f1) && \
 	rm -rf "$$VERIFY_DIR" && \
@@ -115,3 +121,24 @@ verify-release: ## Validate release zip is clean
 		exit 1; \
 	fi && \
 	echo "OK: Release zip clean ($$FILE_COUNT files, $$ZIP_SIZE)"
+
+verify-repo: ## Check git index for banned artifacts
+	@echo "=== Verifying repo cleanliness ===" && \
+	FAILED=0 && \
+	if git ls-files | grep -qE '\.vsix$$'; then \
+		echo "FAIL: .vsix files tracked in git"; FAILED=1; \
+	fi && \
+	if git ls-files | grep -qE 'node_modules/'; then \
+		echo "FAIL: node_modules tracked in git"; FAILED=1; \
+	fi && \
+	if git ls-files | xargs file 2>/dev/null | grep -q 'Mach-O\|ELF\|PE32'; then \
+		echo "FAIL: compiled binaries tracked in git"; FAILED=1; \
+	fi && \
+	if git ls-files | grep -qE '\.db$$|\.db-shm$$|\.db-wal$$'; then \
+		echo "FAIL: database files tracked in git"; FAILED=1; \
+	fi && \
+	if [ "$$FAILED" -eq 1 ]; then \
+		echo "FAIL: Repo contains banned artifacts"; \
+		exit 1; \
+	fi && \
+	echo "OK: Repo is clean"

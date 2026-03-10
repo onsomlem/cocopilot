@@ -42,8 +42,9 @@ Run this against a **fresh clone** using only the README. Every step must pass.
 
 ### Release Packaging
 
+- [ ] `make verify-repo` passes (no binaries, .vsix, node_modules, .db in git index)
 - [ ] `make release` succeeds
-- [ ] `make verify-release` passes (no .git, .db, .DS_Store, __MACOSX)
+- [ ] `make verify-release` passes (no .git, .db, .DS_Store, __MACOSX, node_modules, .vsix)
 - [ ] Release zip can be unpacked and binary runs cleanly
 
 ### CI
