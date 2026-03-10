@@ -83,7 +83,7 @@ func ResolveExecutor() TaskExecutor {
 	return &PlaceholderExecutor{}
 }
 
-// RunWorker implements a simple reference worker that polls claim-next,
+// RunWorker implements a reference worker that polls claim-next,
 // prints claimed tasks, and marks them as completed with a placeholder result.
 func RunWorker(projectID string) error {
 	const defaultHTTPAddr = "127.0.0.1:8080"
@@ -115,8 +115,31 @@ func RunWorker(projectID string) error {
 	fmt.Printf("  Max consecutive failures: %d\n", maxConsecutiveFailures)
 	fmt.Println()
 
+	// Register agent at startup
+	if err := workerRegisterAgent(client, baseURL, apiKey); err != nil {
+		log.Printf("Worker: agent registration warning: %v (continuing anyway)", err)
+	} else {
+		fmt.Printf("Worker: agent registered as agent_worker\n")
+	}
+
+	// Start heartbeat goroutine
+	heartbeatDone := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				workerRegisterAgent(client, baseURL, apiKey)
+			case <-heartbeatDone:
+				return
+			}
+		}
+	}()
+	defer close(heartbeatDone)
+
 	for {
-		taskID, title, instructions, err := workerClaimNext(client, baseURL, projectID, apiKey)
+		claim, err := workerClaimNext(client, baseURL, projectID, apiKey)
 		if err != nil {
 			consecutiveFailures++
 			log.Printf("Worker: claim-next error (%d/%d): %v", consecutiveFailures, maxConsecutiveFailures, err)
@@ -134,39 +157,85 @@ func RunWorker(projectID string) error {
 		}
 		consecutiveFailures = 0
 
-		if taskID == 0 {
+		if claim.TaskID == 0 {
 			fmt.Printf("[%s] No tasks available, waiting...\n", time.Now().Format("15:04:05"))
 			time.Sleep(pollInterval)
 			continue
 		}
 
-		fmt.Printf("[%s] Claimed task #%d: %s\n", time.Now().Format("15:04:05"), taskID, title)
-		if instructions != "" {
-			fmt.Printf("  Instructions: %s\n", truncate(instructions, 200))
+		fmt.Printf("[%s] Claimed task #%d: %s\n", time.Now().Format("15:04:05"), claim.TaskID, claim.Title)
+		if claim.Instructions != "" {
+			fmt.Printf("  Instructions: %s\n", truncate(claim.Instructions, 200))
 		}
 
-		result, execErr := executor.Execute(taskID, title, instructions)
-		if execErr != nil {
-			log.Printf("Worker: executor failed for task #%d: %v", taskID, execErr)
-			result = fmt.Sprintf("Worker executor failed: %v", execErr)
+		// Log run step: starting execution
+		if claim.RunID != "" {
+			workerLogRunStep(client, baseURL, claim.RunID, apiKey, "execute", "running", "Starting task execution")
 		}
-		if err := workerCompleteTask(client, baseURL, taskID, apiKey, result); err != nil {
-			log.Printf("Worker: failed to complete task #%d: %v", taskID, err)
+
+		// Start lease heartbeat for this task
+		leaseStop := make(chan struct{})
+		if claim.LeaseID != "" {
+			go func(leaseID string) {
+				ticker := time.NewTicker(15 * time.Second)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-ticker.C:
+						workerHeartbeatLease(client, baseURL, leaseID, apiKey)
+					case <-leaseStop:
+						return
+					}
+				}
+			}(claim.LeaseID)
+		}
+
+		result, execErr := executor.Execute(claim.TaskID, claim.Title, claim.Instructions)
+		close(leaseStop)
+
+		if execErr != nil {
+			log.Printf("Worker: executor failed for task #%d: %v", claim.TaskID, execErr)
+			// Log failure step
+			if claim.RunID != "" {
+				workerLogRunStep(client, baseURL, claim.RunID, apiKey, "execute", "failed", fmt.Sprintf("Execution failed: %v", execErr))
+			}
+			if err := workerFailTask(client, baseURL, claim.TaskID, apiKey, execErr.Error()); err != nil {
+				log.Printf("Worker: failed to fail task #%d: %v", claim.TaskID, err)
+			} else {
+				fmt.Printf("[%s] Failed task #%d\n", time.Now().Format("15:04:05"), claim.TaskID)
+			}
 		} else {
-			fmt.Printf("[%s] Completed task #%d\n", time.Now().Format("15:04:05"), taskID)
+			// Log success step
+			if claim.RunID != "" {
+				workerLogRunStep(client, baseURL, claim.RunID, apiKey, "execute", "succeeded", "Task execution completed")
+			}
+			if err := workerCompleteTask(client, baseURL, claim.TaskID, apiKey, result); err != nil {
+				log.Printf("Worker: failed to complete task #%d: %v", claim.TaskID, err)
+			} else {
+				fmt.Printf("[%s] Completed task #%d\n", time.Now().Format("15:04:05"), claim.TaskID)
+			}
 		}
 
 		time.Sleep(1 * time.Second)
 	}
 }
 
-func workerClaimNext(client *http.Client, baseURL, projectID, apiKey string) (int, string, string, error) {
+// claimResult holds the parsed claim-next response.
+type claimResult struct {
+	TaskID       int
+	Title        string
+	Instructions string
+	RunID        string
+	LeaseID      string
+}
+
+func workerClaimNext(client *http.Client, baseURL, projectID, apiKey string) (claimResult, error) {
 	url := fmt.Sprintf("%s/api/v2/projects/%s/tasks/claim-next", baseURL, projectID)
 
 	body := strings.NewReader(`{"agent_id":"agent_worker"}`)
 	req, err := http.NewRequest(http.MethodPost, url, body)
 	if err != nil {
-		return 0, "", "", err
+		return claimResult{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if apiKey != "" {
@@ -175,20 +244,20 @@ func workerClaimNext(client *http.Client, baseURL, projectID, apiKey string) (in
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return 0, "", "", err
+		return claimResult{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusNotFound {
-		return 0, "", "", nil
+		return claimResult{}, nil
 	}
 	if resp.StatusCode != http.StatusOK {
-		return 0, "", "", fmt.Errorf("unexpected status %d", resp.StatusCode)
+		return claimResult{}, fmt.Errorf("unexpected status %d", resp.StatusCode)
 	}
 
 	var result map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return 0, "", "", fmt.Errorf("failed to decode response: %w", err)
+		return claimResult{}, fmt.Errorf("failed to decode response: %w", err)
 	}
 
 	// v2 claim-next returns {"task": {...}, "lease": {...}, "run": {...}, "context": {...}}
@@ -199,20 +268,32 @@ func workerClaimNext(client *http.Client, baseURL, projectID, apiKey string) (in
 			taskID := toInt(envelope["task_id"])
 			title, _ := envelope["title"].(string)
 			instructions, _ := envelope["instructions"].(string)
-			return taskID, title, instructions, nil
+			return claimResult{TaskID: taskID, Title: title, Instructions: instructions}, nil
 		}
 		if tid, ok := result["task_id"]; ok {
 			taskID := toInt(tid)
-			return taskID, "", "", nil
+			return claimResult{TaskID: taskID}, nil
 		}
-		return 0, "", "", fmt.Errorf("unexpected response format")
+		return claimResult{}, fmt.Errorf("unexpected response format")
 	}
 
-	taskID := toInt(task["id"])
-	title, _ := task["title"].(string)
-	instructions, _ := task["instructions"].(string)
+	cr := claimResult{
+		TaskID:       toInt(task["id"]),
+		Title:        toString(task["title"]),
+		Instructions: toString(task["instructions"]),
+	}
 
-	return taskID, title, instructions, nil
+	// Extract run ID
+	if run, ok := result["run"].(map[string]interface{}); ok {
+		cr.RunID = toString(run["id"])
+	}
+
+	// Extract lease ID
+	if lease, ok := result["lease"].(map[string]interface{}); ok {
+		cr.LeaseID = toString(lease["id"])
+	}
+
+	return cr, nil
 }
 
 func workerCompleteTask(client *http.Client, baseURL string, taskID int, apiKey, result string) error {
@@ -244,6 +325,118 @@ func workerCompleteTask(client *http.Client, baseURL string, taskID int, apiKey,
 		return fmt.Errorf("complete returned status %d", resp.StatusCode)
 	}
 	return nil
+}
+
+func workerFailTask(client *http.Client, baseURL string, taskID int, apiKey, errMsg string) error {
+	url := fmt.Sprintf("%s/api/v2/tasks/%d/fail", baseURL, taskID)
+
+	payload := map[string]interface{}{
+		"error":  errMsg,
+		"output": "Worker execution failed: " + errMsg,
+	}
+	bodyBytes, _ := json.Marshal(payload)
+
+	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(string(bodyBytes)))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if apiKey != "" {
+		req.Header.Set("X-API-Key", apiKey)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("fail returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func workerRegisterAgent(client *http.Client, baseURL, apiKey string) error {
+	url := baseURL + "/api/v2/agents"
+
+	payload := map[string]interface{}{
+		"id":   "agent_worker",
+		"name": "Built-in Worker",
+		"capabilities": []string{"execute", "analyze", "modify"},
+		"metadata": map[string]interface{}{
+			"type":    "built-in",
+			"version": "1.0",
+		},
+	}
+	bodyBytes, _ := json.Marshal(payload)
+
+	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(string(bodyBytes)))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if apiKey != "" {
+		req.Header.Set("X-API-Key", apiKey)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
+func workerHeartbeatLease(client *http.Client, baseURL, leaseID, apiKey string) {
+	url := fmt.Sprintf("%s/api/v2/leases/%s/heartbeat", baseURL, leaseID)
+
+	req, err := http.NewRequest(http.MethodPost, url, nil)
+	if err != nil {
+		return
+	}
+	if apiKey != "" {
+		req.Header.Set("X-API-Key", apiKey)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return
+	}
+	resp.Body.Close()
+}
+
+func workerLogRunStep(client *http.Client, baseURL, runID, apiKey, name, status, details string) {
+	url := fmt.Sprintf("%s/api/v2/runs/%s/steps", baseURL, runID)
+
+	payload := map[string]interface{}{
+		"name":    name,
+		"status":  status,
+		"details": details,
+	}
+	bodyBytes, _ := json.Marshal(payload)
+
+	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(string(bodyBytes)))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if apiKey != "" {
+		req.Header.Set("X-API-Key", apiKey)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return
+	}
+	resp.Body.Close()
+}
+
+func toString(v interface{}) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
 }
 
 func toInt(v interface{}) int {

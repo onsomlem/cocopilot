@@ -121,7 +121,19 @@ cd ` + wd + `
 
 All orchestrator communication uses the v2 JSON API.
 
-### 1. Claim a task
+### 1. Register your agent (recommended)
+
+` + "```" + `
+POST http://127.0.0.1:8080/api/v2/agents
+Content-Type: application/json
+
+{"id": "copilot", "name": "GitHub Copilot", "capabilities": ["analyze", "modify", "test"]}
+` + "```" + `
+
+This makes the agent visible in the Agents dashboard. If you skip this step,
+the server will auto-register a minimal agent record on first claim.
+
+### 2. Claim a task
 
 ` + "```" + `
 POST http://127.0.0.1:8080/api/v2/projects/proj_default/tasks/claim-next
@@ -134,15 +146,33 @@ Response (200):
 ` + "```json" + `
 {
   "task": { "id": 123, "title": "...", "instructions": "...", "status": "IN_PROGRESS", ... },
-  "context": { ... },
-  "run": { "id": "...", ... }
+  "lease": { "id": "lease_xxx", "expires_at": "..." },
+  "run": { "id": "run_xxx", ... },
+  "context": { "memories": [...], "dependencies": [...] }
 }
 ` + "```" + `
 
 If no tasks are available, the response is 404. Poll again after 15 seconds.
-The response contains the task ID, instructions, and assembled context.
+Save the run ID and lease ID from the response for step logging and heartbeats.
 
-### 2. Complete a task
+### 3. Log progress via run steps (recommended)
+
+` + "```" + `
+POST http://127.0.0.1:8080/api/v2/runs/<run_id>/steps
+Content-Type: application/json
+
+{"name": "analyze", "status": "running", "details": "Analyzing codebase..."}
+` + "```" + `
+
+### 4. Heartbeat the lease (recommended for long tasks)
+
+` + "```" + `
+POST http://127.0.0.1:8080/api/v2/leases/<lease_id>/heartbeat
+` + "```" + `
+
+Send every 30 seconds to prevent lease expiry and stale task detection.
+
+### 5. Complete a task
 
 ` + "```" + `
 POST http://127.0.0.1:8080/api/v2/tasks/<task_id>/complete
@@ -158,7 +188,16 @@ Content-Type: application/json
 }
 ` + "```" + `
 
-### 3. List tasks (optional)
+### 6. Fail a task (if execution fails)
+
+` + "```" + `
+POST http://127.0.0.1:8080/api/v2/tasks/<task_id>/fail
+Content-Type: application/json
+
+{"error": "description of failure", "output": "partial output if any"}
+` + "```" + `
+
+### 7. List tasks (optional)
 
 ` + "```" + `
 GET http://127.0.0.1:8080/api/v2/tasks?status=pending

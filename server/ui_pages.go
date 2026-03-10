@@ -17,6 +17,99 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, htmlTemplate)
 }
 
+func dashboardHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/dashboard" {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	var b strings.Builder
+	b.WriteString(subPageHead("Dashboard"))
+	b.WriteString(`<style>
+.dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.dash-card { background: #252526; border: 1px solid #3c3c3c; border-radius: 8px; padding: 20px; text-align: center; }
+.dash-card .dc-label { font-size: 11px; color: #858585; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+.dash-card .dc-value { font-size: 28px; font-weight: 700; color: #ccc; }
+.dash-card.ok .dc-value { color: #89d185; }
+.dash-card.warn .dc-value { color: #cca700; }
+.dash-card.error .dc-value { color: #f14c4c; }
+.dash-card.info .dc-value { color: #56b6f7; }
+.dash-section { background: #252526; border: 1px solid #3c3c3c; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+.dash-section h2 { font-size: 14px; color: #e0e0e0; margin-bottom: 12px; border: none; padding: 0; }
+.dash-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.dash-table th { color: #0078d4; font-weight: 600; font-size: 11px; text-transform: uppercase; padding: 6px 8px; border-bottom: 1px solid #3c3c3c; text-align: left; }
+.dash-table td { padding: 6px 8px; border-bottom: 1px solid #333; color: #ccc; }
+.dash-table tr:hover { background: #2a2d2e; }
+.dash-empty { color: #666; text-align: center; padding: 20px; font-size: 12px; }
+</style>`)
+	b.WriteString(`<div class="card"><h1>Dashboard</h1><p class="muted">Overview of your task queue</p></div>`)
+	b.WriteString(`<div id="dash-app">
+<div class="dash-grid" id="dash-stats"></div>
+<div class="dash-section">
+<h2>Recent Activity</h2>
+<table class="dash-table"><thead><tr><th>Task</th><th>Status</th><th>Agent</th><th>Updated</th></tr></thead>
+<tbody id="dash-recent"><tr><td colspan="4" class="dash-empty">Loading...</td></tr></tbody></table>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+<div class="dash-section">
+<h2>Active Agents</h2>
+<div id="dash-agents" class="dash-empty">Loading...</div>
+</div>
+<div class="dash-section">
+<h2>Failed Tasks</h2>
+<table class="dash-table"><thead><tr><th>ID</th><th>Title</th><th>Updated</th></tr></thead>
+<tbody id="dash-failed"><tr><td colspan="3" class="dash-empty">Loading...</td></tr></tbody></table>
+</div>
+</div>
+</div>`)
+	b.WriteString(`<script>`)
+	b.WriteString(`const escapeHtml=(v)=>String(v??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));`)
+	b.WriteString(`async function loadDashboard(){try{`)
+	b.WriteString(`const [tasksRes,agentsRes]=await Promise.all([fetch('/api/v2/tasks?limit=50'),fetch('/api/v2/agents')]);`)
+	b.WriteString(`const tasksData=tasksRes.ok?await tasksRes.json():{tasks:[]};const agentsData=agentsRes.ok?await agentsRes.json():{agents:[]};`)
+	b.WriteString(`const tasks=Array.isArray(tasksData.tasks)?tasksData.tasks:[];const agents=Array.isArray(agentsData.agents)?agentsData.agents:[];`)
+	// Stats
+	b.WriteString(`const todo=tasks.filter(t=>t.status==='TODO'||t.status==='PENDING').length;`)
+	b.WriteString(`const inProg=tasks.filter(t=>t.status==='IN_PROGRESS').length;`)
+	b.WriteString(`const done=tasks.filter(t=>t.status==='DONE'||t.status==='COMPLETED').length;`)
+	b.WriteString(`const failed=tasks.filter(t=>t.status==='FAILED').length;`)
+	b.WriteString(`const blocked=tasks.filter(t=>t.is_blocked).length;`)
+	b.WriteString(`const onlineAgents=agents.filter(a=>a.status==='ONLINE'||a.status==='active').length;`)
+	b.WriteString(`document.getElementById('dash-stats').innerHTML=`)
+	b.WriteString(`'<div class="dash-card info"><div class="dc-label">Queued</div><div class="dc-value">'+todo+'</div></div>'`)
+	b.WriteString(`+'<div class="dash-card warn"><div class="dc-label">In Progress</div><div class="dc-value">'+inProg+'</div></div>'`)
+	b.WriteString(`+'<div class="dash-card ok"><div class="dc-label">Completed</div><div class="dc-value">'+done+'</div></div>'`)
+	b.WriteString(`+'<div class="dash-card error"><div class="dc-label">Failed</div><div class="dc-value">'+failed+'</div></div>'`)
+	b.WriteString(`+'<div class="dash-card'+(blocked>0?' warn':'')+'" ><div class="dc-label">Blocked</div><div class="dc-value">'+blocked+'</div></div>'`)
+	b.WriteString(`+'<div class="dash-card info"><div class="dc-label">Agents Online</div><div class="dc-value">'+onlineAgents+'/'+agents.length+'</div></div>';`)
+	// Recent tasks
+	b.WriteString(`const sorted=[...tasks].sort((a,b)=>(b.updated_at||b.created_at||'').localeCompare(a.updated_at||a.created_at||'')).slice(0,10);`)
+	b.WriteString(`const tbody=document.getElementById('dash-recent');`)
+	b.WriteString(`if(sorted.length===0){tbody.innerHTML='<tr><td colspan="4" class="dash-empty">No tasks yet</td></tr>';}else{`)
+	b.WriteString(`tbody.innerHTML='';sorted.forEach(t=>{const tr=document.createElement('tr');`)
+	b.WriteString(`tr.innerHTML='<td>#'+t.id+' '+escapeHtml(t.title||'')+'</td><td>'+escapeHtml(t.status)+'</td><td>'+escapeHtml(t.agent_id||'—')+'</td><td>'+(t.updated_at?new Date(t.updated_at).toLocaleString():'—')+'</td>';`)
+	b.WriteString(`tbody.appendChild(tr);});}`)
+	// Active agents
+	b.WriteString(`const agentsDiv=document.getElementById('dash-agents');`)
+	b.WriteString(`if(agents.length===0){agentsDiv.innerHTML='<div class="dash-empty">No agents registered</div>';}else{`)
+	b.WriteString(`agentsDiv.innerHTML='';agents.forEach(a=>{const d=document.createElement('div');`)
+	b.WriteString(`d.style.cssText='display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #333;font-size:12px;';`)
+	b.WriteString(`d.innerHTML='<span>'+escapeHtml(a.name||a.id)+'</span><span style="color:'+(a.status==='ONLINE'||a.status==='active'?'#89d185':'#858585')+'">'+escapeHtml(a.status)+'</span>';`)
+	b.WriteString(`agentsDiv.appendChild(d);});}`)
+	// Failed tasks
+	b.WriteString(`const failedTasks=tasks.filter(t=>t.status==='FAILED').slice(0,5);`)
+	b.WriteString(`const ftbody=document.getElementById('dash-failed');`)
+	b.WriteString(`if(failedTasks.length===0){ftbody.innerHTML='<tr><td colspan="3" class="dash-empty">No failed tasks</td></tr>';}else{`)
+	b.WriteString(`ftbody.innerHTML='';failedTasks.forEach(t=>{const tr=document.createElement('tr');`)
+	b.WriteString(`tr.innerHTML='<td>#'+t.id+'</td><td>'+escapeHtml(t.title||'(untitled)')+'</td><td>'+(t.updated_at?new Date(t.updated_at).toLocaleString():'—')+'</td>';`)
+	b.WriteString(`ftbody.appendChild(tr);});}`)
+	b.WriteString(`}catch(e){document.getElementById('dash-stats').innerHTML='<div class="dash-card error"><div class="dc-label">Error</div><div class="dc-value">!</div></div>';}}`)
+	b.WriteString(`loadDashboard();setInterval(loadDashboard,15000);`)
+	b.WriteString(`</script>`)
+	b.WriteString(subPageFoot())
+	fmt.Fprint(w, b.String())
+}
+
 // subPageHead returns a consistent HTML head + nav bar for all sub-pages,
 // matching the Kanban's VSCode-inspired dark theme.
 func subPageHead(title string) string {
@@ -64,10 +157,11 @@ func subPageHead(title string) string {
 		`<svg class="nav-icon" width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8.5 1a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zm0 1a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11zm-2 3.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5zm0 2a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5zm0 2a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5z"/></svg>` +
 		`<a class="nav-title" href="/">Cocopilot</a>` +
 		`<nav>` +
-		`<a href="/">Kanban</a>` +
-		`<a href="/projects">Projects</a>` +
-		`<a href="/agents">Agents</a>` +
+		`<a href="/dashboard">Dashboard</a>` +
+		`<a href="/">Board</a>` +
 		`<a href="/runs">Runs</a>` +
+		`<a href="/agents">Agents</a>` +
+		`<a href="/repo">Repo</a>` +
 		`<a href="/memory">Memory</a>` +
 		`<a href="/policies">Policies</a>` +
 		`<a href="/dependencies">Dependencies</a>` +
@@ -298,7 +392,9 @@ func contextPackDetailPage(packID string) string {
 	b.WriteString("statusEl.textContent='Loaded';")
 	b.WriteString("summaryEl.textContent=pack&&pack.summary?pack.summary:'No summary';")
 	b.WriteString("const contents=pack&&pack.contents?pack.contents:{};")
-	b.WriteString("const files=Array.isArray(contents.files)?contents.files:[];setFiles(files);")
+	b.WriteString("let files=Array.isArray(contents.files)?contents.files:[];")
+	b.WriteString("if(!files.length&&contents.repo_files&&Array.isArray(contents.repo_files.files)){files=contents.repo_files.files;}")
+	b.WriteString("setFiles(files);")
 	b.WriteString("jsonEl.textContent=JSON.stringify(pack,null,2);")
 	b.WriteString("}catch(err){statusEl.textContent='Failed to load pack';")
 	b.WriteString("summaryEl.textContent='-';filesEl.innerHTML='';")
@@ -648,40 +744,73 @@ func agentsPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	var b strings.Builder
 	b.WriteString(subPageHead("Agents"))
+	b.WriteString(`<style>
+.agents-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; margin-top: 16px; }
+.agent-card { background: var(--vscode-input-bg, #2a2d2e); border: 1px solid var(--vscode-border, #3c3c3c); border-radius: 8px; padding: 16px; transition: border-color 0.15s; }
+.agent-card:hover { border-color: #0078d4; }
+.agent-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.agent-card-name { font-size: 14px; font-weight: 600; }
+.agent-card-id { font-size: 11px; color: #858585; font-family: monospace; }
+.agent-status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+.agent-status-dot.online { background: #4caf50; box-shadow: 0 0 4px #4caf50; }
+.agent-status-dot.offline { background: #666; }
+.agent-status-dot.stale { background: #ff9800; }
+.agent-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px; }
+.agent-meta-label { color: #858585; font-size: 11px; }
+.agent-meta-value { color: #ccc; }
+.agent-caps { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.agent-cap-tag { background: #0e3a5e; color: #56b6f7; font-size: 10px; padding: 2px 6px; border-radius: 10px; }
+.agent-actions { margin-top: 12px; display: flex; gap: 8px; }
+.agent-actions button { background: var(--vscode-input-bg, #2a2d2e); border: 1px solid var(--vscode-border, #3c3c3c); color: #ccc; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+.agent-actions button:hover { background: #3c3c3c; }
+.agent-actions button.danger { color: #f44; }
+.agent-actions button.danger:hover { background: #4c1c1c; }
+.heartbeat-bar { height: 4px; border-radius: 2px; margin-top: 4px; background: #333; overflow: hidden; }
+.heartbeat-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+.heartbeat-fill.fresh { background: #4caf50; }
+.heartbeat-fill.aging { background: #ff9800; }
+.heartbeat-fill.stale { background: #f44; }
+</style>`)
 	b.WriteString("<div class=\"card\">")
 	b.WriteString("<h1>Agents</h1>")
-	b.WriteString("<p>Latest agents from <span class=\"muted\">/api/v2/agents</span></p>")
-	b.WriteString("<div class=\"meta\"><span id=\"agents-status\">Loading...</span>")
-	b.WriteString("<label class=\"field\">Status<select class=\"select\" id=\"agents-status-filter\"><option value=\"\">All</option><option value=\"active\">Active</option><option value=\"stale\">Stale</option></select></label>")
-	b.WriteString("<label class=\"field\">Limit<input class=\"input\" id=\"agents-limit\" type=\"number\" min=\"1\" max=\"200\" step=\"1\" value=\"50\"></label>")
+	b.WriteString("<p class=\"muted\">Registered agents across all projects</p>")
+	b.WriteString("<div class=\"meta\"><span id=\"agents-status\">Loading...</span> ")
+	b.WriteString("<label class=\"field\">Status<select class=\"select\" id=\"agents-status-filter\"><option value=\"\">All</option><option value=\"active\">Active</option><option value=\"stale\">Stale</option></select></label> ")
 	b.WriteString("<button class=\"btn\" id=\"agents-refresh\" type=\"button\">Refresh</button></div>")
-	b.WriteString("<table><thead><tr><th>ID</th><th>Status</th><th>Last Seen</th></tr></thead>")
-	b.WriteString("<tbody id=\"agents-body\"><tr><td colspan=\"3\">Loading...</td></tr></tbody></table>")
+	b.WriteString("<div class=\"agents-grid\" id=\"agents-grid\"><div style=\"color:#858585;\">Loading...</div></div>")
 	b.WriteString("</div>")
 	b.WriteString("<script>")
-	b.WriteString("const bodyEl=document.getElementById('agents-body');")
-	b.WriteString("const statusEl=document.getElementById('agents-status');")
-	b.WriteString("const refreshBtn=document.getElementById('agents-refresh');")
-	b.WriteString("const statusFilterEl=document.getElementById('agents-status-filter');")
-	b.WriteString("const limitEl=document.getElementById('agents-limit');")
+	b.WriteString(`const gridEl=document.getElementById('agents-grid');const statusEl=document.getElementById('agents-status');const refreshBtn=document.getElementById('agents-refresh');const statusFilterEl=document.getElementById('agents-status-filter');`)
 	b.WriteString(`const escapeHtml=(v)=>String(v??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));`)
-	b.WriteString("function getLimit(){const raw=Number.parseInt(limitEl.value,10);if(Number.isNaN(raw)||raw<1){return 50;}return Math.min(raw,200);}")
-	b.WriteString("async function loadAgents(){statusEl.textContent='Loading...';")
-	b.WriteString("bodyEl.innerHTML='<tr><td colspan=\"3\">Loading...</td></tr>';try{")
-	b.WriteString("const params=new URLSearchParams();const limit=getLimit();params.set('limit',String(limit));const status=String(statusFilterEl.value||'').trim();if(status){params.set('status',status);}const res=await fetch('/api/v2/agents?'+params.toString());if(!res.ok)throw new Error();")
-	b.WriteString("const data=await res.json();const agents=Array.isArray(data.agents)?data.agents:[];")
-	b.WriteString("statusEl.textContent=agents.length+' agents';")
-	b.WriteString("if(agents.length===0){bodyEl.innerHTML='<tr><td colspan=\"3\">No agents</td></tr>';return;}")
-	b.WriteString("bodyEl.innerHTML='';agents.forEach((agent)=>{")
-	b.WriteString("const tr=document.createElement('tr');")
-	b.WriteString("const id=escapeHtml(agent.id);const status=escapeHtml(agent.status);const lastSeen=escapeHtml(agent.last_seen||'');")
-	b.WriteString("tr.innerHTML='<td>'+id+'</td><td>'+status+'</td><td>'+lastSeen+'</td>';bodyEl.appendChild(tr);});")
-	b.WriteString("}catch(err){statusEl.textContent='Failed to load agents';")
-	b.WriteString("bodyEl.innerHTML='<tr><td colspan=\"3\">Error loading agents</td></tr>';}}")
-	b.WriteString("refreshBtn.addEventListener('click',loadAgents);")
-	b.WriteString("statusFilterEl.addEventListener('change',loadAgents);")
-	b.WriteString("limitEl.addEventListener('change',loadAgents);")
-	b.WriteString("loadAgents();")
+	b.WriteString(`function heartbeatAge(lastSeen){if(!lastSeen)return{pct:0,cls:'stale',label:'never'};const ms=Date.now()-new Date(lastSeen).getTime();const secs=ms/1000;if(secs<60)return{pct:100,cls:'fresh',label:Math.round(secs)+'s ago'};if(secs<300)return{pct:Math.max(40,100-secs/3),cls:'aging',label:Math.round(secs/60)+'m ago'};return{pct:10,cls:'stale',label:secs>86400?Math.round(secs/86400)+'d ago':Math.round(secs/3600)+'h ago'};}`)
+	b.WriteString(`async function deleteAgent(id){if(!confirm('Delete agent '+id+'?'))return;try{const r=await fetch('/api/v2/agents/'+encodeURIComponent(id),{method:'DELETE'});if(r.ok){loadAgents();}else{alert('Failed to delete agent');}}catch(e){alert('Error: '+e.message);}}`)
+	b.WriteString(`async function loadAgents(){statusEl.textContent='Loading...';gridEl.innerHTML='<div style="color:#858585;">Loading...</div>';try{`)
+	b.WriteString(`const params=new URLSearchParams();const status=String(statusFilterEl.value||'').trim();if(status)params.set('status',status);`)
+	b.WriteString(`const res=await fetch('/api/v2/agents?'+params.toString());if(!res.ok)throw new Error();`)
+	b.WriteString(`const data=await res.json();const agents=Array.isArray(data.agents)?data.agents:[];`)
+	b.WriteString(`statusEl.textContent=agents.length+' agent'+(agents.length!==1?'s':'');`)
+	b.WriteString(`if(agents.length===0){gridEl.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:40px;color:#858585;">No agents registered yet.<br><span style="font-size:11px;color:#666;">Agents auto-register when they claim tasks via the v2 API.</span></div>';return;}`)
+	b.WriteString(`gridEl.innerHTML='';agents.forEach((agent)=>{`)
+	b.WriteString(`const hb=heartbeatAge(agent.last_seen);`)
+	b.WriteString(`const statusLower=(agent.status||'unknown').toLowerCase();`)
+	b.WriteString(`const dotCls=statusLower==='online'?'online':statusLower==='active'?'online':statusLower==='stale'?'stale':'offline';`)
+	b.WriteString(`const caps=Array.isArray(agent.capabilities)?agent.capabilities:[];`)
+	b.WriteString(`const meta=agent.metadata||{};`)
+	b.WriteString(`let capsHtml='';if(caps.length>0){capsHtml='<div class="agent-caps">'+caps.map(c=>'<span class="agent-cap-tag">'+escapeHtml(c)+'</span>').join('')+'</div>';}`)
+	b.WriteString(`const card=document.createElement('div');card.className='agent-card';`)
+	b.WriteString(`card.innerHTML='<div class="agent-card-header"><div><span class="agent-status-dot '+dotCls+'"></span><span class="agent-card-name">'+escapeHtml(agent.name||agent.id)+'</span></div><span style="font-size:11px;padding:2px 8px;border-radius:10px;background:'+(dotCls==='online'?'#1a3a1a':'#333')+';color:'+(dotCls==='online'?'#4caf50':'#888')+';">'+escapeHtml(agent.status||'unknown')+'</span></div>'`)
+	b.WriteString(`+'<div class="agent-card-id">'+escapeHtml(agent.id)+'</div>'`)
+	b.WriteString(`+'<div class="agent-meta" style="margin-top:12px;">'`)
+	b.WriteString(`+'<div><div class="agent-meta-label">Heartbeat</div><div class="agent-meta-value">'+hb.label+'</div><div class="heartbeat-bar"><div class="heartbeat-fill '+hb.cls+'" style="width:'+hb.pct+'%"></div></div></div>'`)
+	b.WriteString(`+'<div><div class="agent-meta-label">Created</div><div class="agent-meta-value">'+(agent.created_at?new Date(agent.created_at).toLocaleString():'—')+'</div></div>'`)
+	b.WriteString(`+'<div><div class="agent-meta-label">Current Task</div><div class="agent-meta-value">'+(meta.current_task?'#'+escapeHtml(meta.current_task):'idle')+'</div></div>'`)
+	b.WriteString(`+'<div><div class="agent-meta-label">Tasks Done</div><div class="agent-meta-value">'+(meta.completed_count||'0')+'</div></div>'`)
+	b.WriteString(`+'</div>'`)
+	b.WriteString(`+capsHtml`)
+	b.WriteString(`+'<div class="agent-actions"><button onclick="deleteAgent(\''+escapeHtml(agent.id)+'\')" class="danger">Delete</button></div>';`)
+	b.WriteString(`gridEl.appendChild(card);});`)
+	b.WriteString(`}catch(err){statusEl.textContent='Failed to load agents';gridEl.innerHTML='<div style="color:#f44;">Error loading agents</div>';}}`)
+	b.WriteString(`refreshBtn.addEventListener('click',loadAgents);statusFilterEl.addEventListener('change',loadAgents);loadAgents();setInterval(loadAgents,30000);`)
 	b.WriteString("</script>")
 	b.WriteString(subPageFoot())
 	fmt.Fprint(w, b.String())
@@ -1206,7 +1335,7 @@ func contextPacksCreatePage() string {
 	b.WriteString("</div>")
 	b.WriteString("<label for=\"task-id\">Task ID</label>")
 	b.WriteString("<div class=\"row\">")
-	b.WriteString("<input id=\"task-id\" name=\"taskId\" placeholder=\"task_abc123\" required>")
+	b.WriteString("<input id=\"task-id\" name=\"taskId\" type=\"number\" min=\"1\" placeholder=\"123\" required>")
 	b.WriteString("</div>")
 	b.WriteString("<label for=\"query\">Query (optional)</label>")
 	b.WriteString("<div class=\"row\">")
@@ -1231,7 +1360,7 @@ func contextPacksCreatePage() string {
 	b.WriteString("if(!taskId){taskInput.focus();return;}")
 	b.WriteString("const pid=String(projectInput.value||'proj_default').trim();")
 	b.WriteString("endpointEl.textContent='POST /api/v2/projects/'+pid+'/context-packs';")
-	b.WriteString("const payload={task_id:taskId};")
+	b.WriteString("const payload={task_id:parseInt(taskId,10)};")
 	b.WriteString("const query=queryInput.value.trim();")
 	b.WriteString("if(query){payload.query=query;}")
 	b.WriteString("statusEl.textContent='Status: sending...';outputEl.textContent='';")
@@ -1323,6 +1452,51 @@ const htmlTemplate = `
             }
 
             .header-nav a:hover {
+                color: var(--vscode-text);
+                background: var(--vscode-input-bg);
+            }
+            .header-nav a.active {
+                color: var(--vscode-text);
+                background: var(--vscode-input-bg);
+                font-weight: 600;
+            }
+            .nav-more {
+                position: relative;
+            }
+            .nav-more-btn {
+                color: var(--vscode-text-muted);
+                background: none;
+                border: none;
+                cursor: pointer;
+                font-size: 12px;
+                padding: 4px 6px;
+                border-radius: 4px;
+                transition: all 0.15s;
+            }
+            .nav-more-btn:hover {
+                color: var(--vscode-text);
+                background: var(--vscode-input-bg);
+            }
+            .nav-more-dropdown {
+                position: absolute;
+                top: 100%;
+                left: 0;
+                background: var(--vscode-dropdown-bg);
+                border: 1px solid var(--vscode-border);
+                border-radius: 6px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                min-width: 160px;
+                z-index: 1000;
+                padding: 4px 0;
+            }
+            .nav-more-dropdown a {
+                display: block;
+                padding: 6px 12px;
+                color: var(--vscode-text-muted);
+                text-decoration: none;
+                font-size: 12px;
+            }
+            .nav-more-dropdown a:hover {
                 color: var(--vscode-text);
                 background: var(--vscode-input-bg);
             }
@@ -1773,6 +1947,7 @@ const htmlTemplate = `
             .toast.toast-error { border-left: 3px solid var(--vscode-error); }
             .toast.toast-info { border-left: 3px solid var(--vscode-info); }
             @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+            @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
             /* Confirm dialog */
             .confirm-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 2000; display: flex; align-items: center; justify-content: center; }
@@ -1796,6 +1971,10 @@ const htmlTemplate = `
             .badge-priority-medium { background: rgba(204,167,0,0.15); color: var(--vscode-warning); }
             .badge-priority-low { background: rgba(137,209,133,0.15); color: var(--vscode-success); }
             .badge-agent { background: rgba(204,204,204,0.1); color: var(--vscode-text-muted); }
+            .badge-blocked { background: rgba(244,135,113,0.2); color: var(--vscode-error); }
+            .badge-deps { background: rgba(55,148,255,0.1); color: var(--vscode-text-muted); font-size: 9px; }
+            .badge-approval { background: rgba(204,167,0,0.15); color: var(--vscode-warning); }
+            .badge-status-v2 { background: rgba(204,204,204,0.08); color: var(--vscode-text-muted); font-size: 9px; letter-spacing: 0.3px; }
 
             /* Task detail drawer */
             .detail-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 480px; background: var(--vscode-sidebar); border-left: 1px solid var(--vscode-border); z-index: 900; box-shadow: -4px 0 16px rgba(0,0,0,0.3); display: flex; flex-direction: column; transform: translateX(100%); transition: transform 0.2s ease; }
@@ -1809,6 +1988,11 @@ const htmlTemplate = `
             .drawer-meta { display: grid; grid-template-columns: 100px 1fr; gap: 6px; font-size: 12px; }
             .drawer-meta dt { color: var(--vscode-text-muted); }
             .drawer-meta dd { color: var(--vscode-text); margin: 0; }
+            .drawer-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+            .drawer-actions button { background: var(--vscode-input-bg); border: 1px solid var(--vscode-border); color: var(--vscode-text); padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; }
+            .drawer-actions button:hover { border-color: var(--vscode-accent); }
+            .drawer-actions button.danger { color: var(--vscode-error); }
+            .drawer-actions button.danger:hover { border-color: var(--vscode-error); }
 
             /* Task hierarchy - indentation for child tasks */
             .task-card[data-depth="1"] { margin-left: 20px; border-left: 3px solid var(--vscode-accent); }
@@ -1949,14 +2133,30 @@ const htmlTemplate = `
                     <h3>Metadata</h3>
                     <dl class="drawer-meta">
                         <dt>ID</dt><dd x-text="selectedTask ? selectedTask.id : ''"></dd>
+                        <dt>Title</dt><dd x-text="selectedTask ? (selectedTask.title || '—') : ''"></dd>
                         <dt>Status</dt><dd x-text="selectedTask ? selectedTask.status : ''"></dd>
+                        <dt>Status v2</dt><dd x-text="selectedTask ? (selectedTask.status_v2 || selectedTask.status) : ''"></dd>
                         <dt>Created</dt><dd x-text="selectedTask ? selectedTask.created_at : ''"></dd>
                         <dt>Updated</dt><dd x-text="selectedTask ? (selectedTask.updated_at || '—') : ''"></dd>
                         <dt>Parent</dt><dd x-text="selectedTask && selectedTask.parent_task_id ? '#' + selectedTask.parent_task_id : '—'"></dd>
-                        <dt>Priority</dt><dd x-text="selectedTask ? (selectedTask.priority || 'normal') : ''"></dd>
+                        <dt>Priority</dt><dd x-text="selectedTask ? (selectedTask.priority || 50) : ''"></dd>
                         <dt>Type</dt><dd x-text="selectedTask ? (selectedTask.type || '—') : ''"></dd>
                         <dt>Agent</dt><dd x-text="selectedTask ? (selectedTask.agent_id || '—') : ''"></dd>
+                        <dt>Tags</dt><dd x-text="selectedTask && selectedTask.tags ? selectedTask.tags.join(', ') : '—'"></dd>
+                        <dt>Approval</dt><dd x-text="selectedTask && selectedTask.requires_approval ? 'Required' : 'Not required'"></dd>
+                        <dt>Dependencies</dt><dd x-text="selectedTask && selectedTask.dependency_count ? selectedTask.dependency_count + ' dependencies' : 'None'"></dd>
+                        <dt>Blocked</dt><dd x-text="selectedTask && selectedTask.blocked ? 'Yes' : 'No'"></dd>
                     </dl>
+                </div>
+                <div class="drawer-section">
+                    <h3>Quick Actions</h3>
+                    <div class="drawer-actions">
+                        <button @click="claimSelectedTask" x-show="selectedTask && selectedTask.status === 'NOT_PICKED'">Claim</button>
+                        <button @click="completeSelectedTask" x-show="selectedTask && selectedTask.status === 'IN_PROGRESS'">Complete</button>
+                        <button class="danger" @click="failSelectedTask" x-show="selectedTask && selectedTask.status === 'IN_PROGRESS'">Fail</button>
+                        <button @click="duplicateSelectedTask">Duplicate</button>
+                        <button class="danger" @click="deleteTask(selectedTask.id); selectedTask = null">Delete</button>
+                    </div>
                 </div>
                 <div class="drawer-section">
                     <h3>Instructions</h3>
@@ -2007,6 +2207,12 @@ const htmlTemplate = `
                                 <label>Type (optional)</label>
                                 <select x-model="newTaskType" style="width:100%;background:var(--vscode-input-bg);border:1px solid var(--vscode-border);border-radius:6px;color:var(--vscode-text);font-size:13px;padding:10px 12px;outline:none;cursor:pointer;">
                                     <option value="">None</option>
+                                    <option value="analyze">Analyze</option>
+                                    <option value="modify">Modify</option>
+                                    <option value="test">Test</option>
+                                    <option value="review">Review</option>
+                                    <option value="doc">Doc</option>
+                                    <option value="plan">Plan</option>
                                     <option value="feature">Feature</option>
                                     <option value="bug">Bug</option>
                                     <option value="chore">Chore</option>
@@ -2023,6 +2229,16 @@ const htmlTemplate = `
                                     <option value="low">Low</option>
                                 </select>
                             </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Tags (comma-separated, optional)</label>
+                            <input type="text" x-model="newTaskTags" placeholder="e.g. backend, urgent, v2"
+                                   style="width:100%;background:var(--vscode-input-bg);border:1px solid var(--vscode-border);border-radius:6px;color:var(--vscode-text);font-family:inherit;font-size:13px;padding:10px 12px;outline:none;">
+                        </div>
+                        <div class="form-group" style="display:flex;align-items:center;gap:8px;">
+                            <input type="checkbox" id="requiresApproval" x-model="newTaskRequiresApproval"
+                                   style="width:16px;height:16px;cursor:pointer;">
+                            <label for="requiresApproval" style="margin:0;cursor:pointer;">Requires approval before completion</label>
                         </div>
                         <div class="form-group">
                             <label>Instructions</label>
@@ -2088,20 +2304,26 @@ const htmlTemplate = `
             </svg>
             <span class="header-title">Cocopilot</span>
             <nav class="header-nav" aria-label="Primary">
-                <a href="/projects">Projects</a>
-                <a href="/agents">Agents</a>
+                <a href="/dashboard">Dashboard</a>
+                <a href="/projects">Board</a>
                 <a href="/runs">Runs</a>
-                <a href="/memory">Memory</a>
-                <a href="/policies">Policies</a>
-                <a href="/dependencies">Dependencies</a>
-                <a href="/context-packs">Context Packs</a>
-                <a href="/events-browser">Events</a>
-                <a href="/graphs/tasks">Task DAG</a>
-                <a href="/graphs/repo">Repo Graph</a>
+                <a href="/agents">Agents</a>
                 <a href="/repo">Repo</a>
-                <a href="/audit">Audit</a>
-                <a href="/settings">Settings</a>
-                <a href="/health">Health</a>
+                <div class="nav-more" x-data="{ open: false }" @click.outside="open = false">
+                    <button class="nav-more-btn" @click="open = !open">More ▾</button>
+                    <div class="nav-more-dropdown" x-show="open" x-cloak @click="open = false">
+                        <a href="/memory">Memory</a>
+                        <a href="/policies">Policies</a>
+                        <a href="/dependencies">Dependencies</a>
+                        <a href="/context-packs">Context Packs</a>
+                        <a href="/events-browser">Events</a>
+                        <a href="/graphs/tasks">Task DAG</a>
+                        <a href="/graphs/repo">Repo Graph</a>
+                        <a href="/audit">Audit</a>
+                        <a href="/settings">Settings</a>
+                        <a href="/health">Health</a>
+                    </div>
+                </div>
             </nav>
             <div class="header-actions">
                 <div class="workdir-input">
@@ -2155,14 +2377,47 @@ const htmlTemplate = `
         <!-- Filter bar -->
         <div class="filter-bar">
             <span class="filter-label">Filter:</span>
-            <input type="text" placeholder="Search tasks..." x-model="searchQuery" @input="filterTasks">
+            <input type="text" placeholder="Search tasks... (press /)" x-model="searchQuery">
+            <select x-model="filterType">
+                <option value="">All types</option>
+                <option value="ANALYZE">Analyze</option>
+                <option value="MODIFY">Modify</option>
+                <option value="TEST">Test</option>
+                <option value="REVIEW">Review</option>
+                <option value="DOC">Doc</option>
+                <option value="PLAN">Plan</option>
+                <option value="RELEASE">Release</option>
+                <option value="FEATURE">Feature</option>
+                <option value="BUG">Bug</option>
+                <option value="CHORE">Chore</option>
+                <option value="REFACTOR">Refactor</option>
+                <option value="RESEARCH">Research</option>
+            </select>
+            <select x-model="filterPriority">
+                <option value="">All priorities</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+            </select>
+            <select x-model="filterAgent">
+                <option value="">All agents</option>
+                <template x-for="a in [...new Set(tasks.map(t => t.agent_id).filter(Boolean))]" :key="a">
+                    <option :value="a" x-text="a"></option>
+                </template>
+            </select>
             <span class="filter-label">Sort:</span>
             <select x-model="sortBy">
                 <option value="newest">Newest first</option>
                 <option value="oldest">Oldest first</option>
+                <option value="priority">Priority</option>
                 <option value="id">By ID</option>
             </select>
-            <span class="task-count" x-text="tasks.length + ' task' + (tasks.length !== 1 ? 's' : '') + (searchQuery ? ' (' + filteredCount + ' matching)' : '')"></span>
+            <span class="task-count" x-text="tasks.length + ' task' + (tasks.length !== 1 ? 's' : '') + (searchQuery || filterType || filterPriority || filterAgent ? ' (' + filteredCount + ' matching)' : '')"></span>
+            <span x-show="sseReconnecting" x-cloak style="color:var(--vscode-warning);font-size:11px;display:flex;align-items:center;gap:4px;" title="Reconnecting to server...">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="animation:spin 1s linear infinite;"><path d="M8 1a7 7 0 1 0 7 7h-1.5A5.5 5.5 0 1 1 8 2.5V1z"/></svg>
+                Reconnecting
+            </span>
+            <span x-show="sseConnected && !sseReconnecting" style="color:var(--vscode-success);font-size:10px;" title="Connected">&#9679;</span>
         </div>
 
         <!-- Dashboard stats bar -->
@@ -2234,17 +2489,24 @@ const htmlTemplate = `
                                     </svg>
                                 </div>
                             </div>
-                            <div class="card-badges" x-show="task.type || task.priority || task.agent_id">
+                            <div class="card-badges">
                                 <span class="badge badge-type" x-show="task.type" x-text="task.type"></span>
-                                <span class="badge" :class="'badge-priority-' + (task.priority || 'medium').toLowerCase()" x-show="task.priority" x-text="task.priority"></span>
+                                <span class="badge" :class="task.priority >= 70 ? 'badge-priority-high' : task.priority >= 40 ? 'badge-priority-medium' : 'badge-priority-low'" x-show="task.priority" x-text="task.priority >= 70 ? 'HIGH' : task.priority >= 40 ? 'MED' : 'LOW'"></span>
                                 <span class="badge badge-agent" x-show="task.agent_id" x-text="task.agent_id"></span>
+                                <span class="badge badge-blocked" x-show="task.blocked">BLOCKED</span>
+                                <span class="badge badge-deps" x-show="task.dependency_count" x-text="task.dependency_count + ' dep' + (task.dependency_count > 1 ? 's' : '')"></span>
+                                <span class="badge badge-approval" x-show="task.requires_approval">APPROVAL</span>
+                                <span class="badge badge-status-v2" x-show="task.status_v2 && task.status_v2 !== task.status" x-text="task.status_v2"></span>
                             </div>
                             <div class="card-body" x-show="expandedTasks.includes(task.id)" x-collapse>
                                 <pre class="card-instructions" x-text="task.instructions"></pre>
                             </div>
                         </div>
                     </template>
-                    <div class="empty-column" x-show="todoTasks.length === 0">No tasks</div>
+                    <div class="empty-column" x-show="todoTasks.length === 0">
+                        <p style="color:var(--vscode-text-muted);margin-bottom:8px;">No tasks in queue</p>
+                        <button class="btn btn-primary" @click="openModal" style="font-size:11px;padding:4px 12px;">+ Create Task</button>
+                    </div>
                 </div>
             </div>
 
@@ -2296,17 +2558,23 @@ const htmlTemplate = `
                                     </svg>
                                 </div>
                             </div>
-                            <div class="card-badges" x-show="task.type || task.priority || task.agent_id">
+                            <div class="card-badges">
                                 <span class="badge badge-type" x-show="task.type" x-text="task.type"></span>
-                                <span class="badge" :class="'badge-priority-' + (task.priority || 'medium').toLowerCase()" x-show="task.priority" x-text="task.priority"></span>
+                                <span class="badge" :class="task.priority >= 70 ? 'badge-priority-high' : task.priority >= 40 ? 'badge-priority-medium' : 'badge-priority-low'" x-show="task.priority" x-text="task.priority >= 70 ? 'HIGH' : task.priority >= 40 ? 'MED' : 'LOW'"></span>
                                 <span class="badge badge-agent" x-show="task.agent_id" x-text="task.agent_id"></span>
+                                <span class="badge badge-blocked" x-show="task.blocked">BLOCKED</span>
+                                <span class="badge badge-deps" x-show="task.dependency_count" x-text="task.dependency_count + ' dep' + (task.dependency_count > 1 ? 's' : '')"></span>
+                                <span class="badge badge-approval" x-show="task.requires_approval">APPROVAL</span>
+                                <span class="badge badge-status-v2" x-show="task.status_v2 && task.status_v2 !== task.status" x-text="task.status_v2"></span>
                             </div>
                             <div class="card-body" x-show="expandedTasks.includes(task.id)" x-collapse>
                                 <pre class="card-instructions" x-text="task.instructions"></pre>
                             </div>
                         </div>
                     </template>
-                    <div class="empty-column" x-show="progressTasks.length === 0">No tasks</div>
+                    <div class="empty-column" x-show="progressTasks.length === 0">
+                        <p style="color:var(--vscode-text-muted);">No tasks in progress</p>
+                    </div>
                 </div>
             </div>
 
@@ -2357,10 +2625,11 @@ const htmlTemplate = `
                                     </svg>
                                 </div>
                             </div>
-                            <div class="card-badges" x-show="task.type || task.priority || task.agent_id">
+                            <div class="card-badges">
                                 <span class="badge badge-type" x-show="task.type" x-text="task.type"></span>
-                                <span class="badge" :class="'badge-priority-' + (task.priority || 'medium').toLowerCase()" x-show="task.priority" x-text="task.priority"></span>
+                                <span class="badge" :class="task.priority >= 70 ? 'badge-priority-high' : task.priority >= 40 ? 'badge-priority-medium' : 'badge-priority-low'" x-show="task.priority" x-text="task.priority >= 70 ? 'HIGH' : task.priority >= 40 ? 'MED' : 'LOW'"></span>
                                 <span class="badge badge-agent" x-show="task.agent_id" x-text="task.agent_id"></span>
+                                <span class="badge badge-status-v2" x-show="task.status_v2 && task.status_v2 !== task.status" x-text="task.status_v2"></span>
                             </div>
                             <div class="card-body" x-show="expandedTasks.includes(task.id)" x-collapse>
                                 <pre class="card-instructions" x-text="task.instructions"></pre>
@@ -2371,7 +2640,9 @@ const htmlTemplate = `
                             </div>
                         </div>
                     </template>
-                    <div class="empty-column" x-show="doneTasks.length === 0">No tasks</div>
+                    <div class="empty-column" x-show="doneTasks.length === 0">
+                        <p style="color:var(--vscode-text-muted);">No completed tasks</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2393,6 +2664,8 @@ const htmlTemplate = `
                     newTaskTitle: '',
                     newTaskType: '',
                     newTaskPriority: '',
+                    newTaskTags: '',
+                    newTaskRequiresApproval: false,
                     draggingId: null,
                     draggingTask: null,
                     dragOverColumn: null,
@@ -2406,6 +2679,12 @@ const htmlTemplate = `
                     searchQuery: '',
                     sortBy: 'newest',
                     selectedTask: null,
+                    filterType: '',
+                    filterPriority: '',
+                    filterAgent: '',
+                    filterStatus: '',
+                    sseConnected: false,
+                    sseReconnecting: false,
 
                     // Toast helper
                     showToast(message, type = 'info') {
@@ -2417,8 +2696,16 @@ const htmlTemplate = `
                         this.confirmDialog = { show: true, message, onConfirm };
                     },
 
-                    // Search filter
+                    // Search + filter
                     matchesSearch(task) {
+                        if (this.filterType && (task.type || '').toUpperCase() !== this.filterType.toUpperCase()) return false;
+                        if (this.filterAgent && (task.agent_id || '') !== this.filterAgent) return false;
+                        if (this.filterPriority) {
+                            const p = task.priority || 50;
+                            if (this.filterPriority === 'high' && p < 70) return false;
+                            if (this.filterPriority === 'medium' && (p < 40 || p >= 70)) return false;
+                            if (this.filterPriority === 'low' && p >= 40) return false;
+                        }
                         if (!this.searchQuery) return true;
                         const q = this.searchQuery.toLowerCase();
                         return (
@@ -2492,6 +2779,17 @@ const htmlTemplate = `
                     },
 
                     init() {
+                        // Restore persisted state from localStorage
+                        try {
+                            const saved = JSON.parse(localStorage.getItem('cocopilot_board_state') || '{}');
+                            if (saved.searchQuery) this.searchQuery = saved.searchQuery;
+                            if (saved.sortBy) this.sortBy = saved.sortBy;
+                            if (saved.filterType) this.filterType = saved.filterType;
+                            if (saved.filterPriority) this.filterPriority = saved.filterPriority;
+                            if (saved.filterAgent) this.filterAgent = saved.filterAgent;
+                            if (saved.expandedTasks) this.expandedTasks = saved.expandedTasks;
+                        } catch(e) {}
+
                         this.connectSSE();
                         this.fetchWorkdir();
                         this.fetchProjects();
@@ -2501,6 +2799,35 @@ const htmlTemplate = `
                         setInterval(() => {
                             this.fetchAgents();
                         }, 30000);
+
+                        // Persist state on changes
+                        this.$watch('searchQuery', () => this.persistState());
+                        this.$watch('sortBy', () => this.persistState());
+                        this.$watch('filterType', () => this.persistState());
+                        this.$watch('filterPriority', () => this.persistState());
+                        this.$watch('filterAgent', () => this.persistState());
+                        this.$watch('expandedTasks', () => this.persistState());
+
+                        // Keyboard shortcuts
+                        document.addEventListener('keydown', (e) => {
+                            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+                            if (e.key === 'n' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); this.openModal(); }
+                            if (e.key === '/' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); document.querySelector('.filter-bar input')?.focus(); }
+                            if (e.key === 'Escape' && this.selectedTask) { this.selectedTask = null; }
+                        });
+                    },
+
+                    persistState() {
+                        try {
+                            localStorage.setItem('cocopilot_board_state', JSON.stringify({
+                                searchQuery: this.searchQuery,
+                                sortBy: this.sortBy,
+                                filterType: this.filterType,
+                                filterPriority: this.filterPriority,
+                                filterAgent: this.filterAgent,
+                                expandedTasks: this.expandedTasks,
+                            }));
+                        } catch(e) {}
                     },
 
                     async fetchProjects() {
@@ -2569,8 +2896,14 @@ const htmlTemplate = `
                         if (this.eventSource) {
                             this.eventSource.close();
                         }
+                        this.sseReconnecting = true;
                         const url = this.currentProject ? '/events?project_id=' + encodeURIComponent(this.currentProject) : '/events';
                         this.eventSource = new EventSource(url);
+
+                        this.eventSource.onopen = () => {
+                            this.sseConnected = true;
+                            this.sseReconnecting = false;
+                        };
 
                         // SSE sends named "tasks" events
                         this.eventSource.addEventListener('tasks', (event) => {
@@ -2582,6 +2915,8 @@ const htmlTemplate = `
                         });
 
                         this.eventSource.onerror = () => {
+                            this.sseConnected = false;
+                            this.sseReconnecting = true;
                             this.eventSource.close();
                             // Reconnect after 3 seconds
                             setTimeout(() => this.connectSSE(), 3000);
@@ -2606,21 +2941,30 @@ const htmlTemplate = `
                     async createTask() {
                         if (!this.newTaskInstructions.trim()) return;
 
-                        const formData = new FormData();
-                        formData.append('instructions', this.newTaskInstructions);
-                        formData.append('project_id', this.currentProject);
-                        if (this.newTaskParentId) {
-                            formData.append('parent_task_id', this.newTaskParentId);
-                        }
+                        const payload = {
+                            instructions: this.newTaskInstructions,
+                            project_id: this.currentProject
+                        };
+                        if (this.newTaskTitle.trim()) payload.title = this.newTaskTitle.trim();
+                        if (this.newTaskType) payload.type = this.newTaskType.toUpperCase();
+                        if (this.newTaskPriority === 'high') payload.priority = 80;
+                        else if (this.newTaskPriority === 'medium') payload.priority = 50;
+                        else if (this.newTaskPriority === 'low') payload.priority = 20;
+                        if (this.newTaskParentId) payload.parent_task_id = parseInt(this.newTaskParentId, 10);
+                        if (this.newTaskTags.trim()) payload.tags = this.newTaskTags.split(',').map(t => t.trim()).filter(Boolean);
+                        if (this.newTaskRequiresApproval) payload.requires_approval = true;
 
                         try {
-                            const response = await fetch('/create', {
+                            const url = '/api/v2/projects/' + encodeURIComponent(this.currentProject) + '/tasks';
+                            const response = await fetch(url, {
                                 method: 'POST',
-                                body: formData
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(payload)
                             });
                             if (!response.ok) {
-                                const text = await response.text();
-                                this.showToast('Failed to create task: ' + (text || response.statusText), 'error');
+                                const data = await response.json().catch(() => ({}));
+                                const msg = (data.error && data.error.message) || response.statusText;
+                                this.showToast('Failed to create task: ' + msg, 'error');
                                 return;
                             }
                         } catch (error) {
@@ -2633,6 +2977,8 @@ const htmlTemplate = `
                         this.newTaskTitle = '';
                         this.newTaskType = '';
                         this.newTaskPriority = '';
+                        this.newTaskTags = '';
+                        this.newTaskRequiresApproval = false;
                         this.showModal = false;
                         this.showToast('Task created', 'success');
                     },
@@ -2706,6 +3052,68 @@ const htmlTemplate = `
                                 this.showToast('Failed to delete task: ' + error.message, 'error');
                             }
                         });
+                    },
+
+                    async claimSelectedTask() {
+                        if (!this.selectedTask) return;
+                        try {
+                            const resp = await fetch('/api/v2/tasks/' + this.selectedTask.id + '/claim', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ agent_id: 'manual' })
+                            });
+                            if (resp.ok) { this.showToast('Task claimed', 'success'); this.selectedTask = null; }
+                            else { const d = await resp.json().catch(() => ({})); this.showToast('Claim failed: ' + ((d.error && d.error.message) || resp.statusText), 'error'); }
+                        } catch (e) { this.showToast('Claim failed: ' + e.message, 'error'); }
+                    },
+
+                    async completeSelectedTask() {
+                        if (!this.selectedTask) return;
+                        try {
+                            const resp = await fetch('/api/v2/tasks/' + this.selectedTask.id + '/complete', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ output: 'Manually completed' })
+                            });
+                            if (resp.ok) { this.showToast('Task completed', 'success'); this.selectedTask = null; }
+                            else { const d = await resp.json().catch(() => ({})); this.showToast('Complete failed: ' + ((d.error && d.error.message) || resp.statusText), 'error'); }
+                        } catch (e) { this.showToast('Complete failed: ' + e.message, 'error'); }
+                    },
+
+                    async failSelectedTask() {
+                        if (!this.selectedTask) return;
+                        try {
+                            const resp = await fetch('/api/v2/tasks/' + this.selectedTask.id + '/fail', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ error: 'Manually failed' })
+                            });
+                            if (resp.ok) { this.showToast('Task failed', 'success'); this.selectedTask = null; }
+                            else { const d = await resp.json().catch(() => ({})); this.showToast('Fail failed: ' + ((d.error && d.error.message) || resp.statusText), 'error'); }
+                        } catch (e) { this.showToast('Fail failed: ' + e.message, 'error'); }
+                    },
+
+                    async duplicateSelectedTask() {
+                        if (!this.selectedTask) return;
+                        const t = this.selectedTask;
+                        const payload = {
+                            instructions: t.instructions,
+                            project_id: this.currentProject,
+                        };
+                        if (t.title) payload.title = t.title + ' (copy)';
+                        if (t.type) payload.type = t.type;
+                        if (t.priority) payload.priority = t.priority;
+                        if (t.tags) payload.tags = t.tags;
+                        try {
+                            const url = '/api/v2/projects/' + encodeURIComponent(this.currentProject) + '/tasks';
+                            const resp = await fetch(url, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(payload)
+                            });
+                            if (resp.ok) { this.showToast('Task duplicated', 'success'); }
+                            else { this.showToast('Duplicate failed', 'error'); }
+                        } catch (e) { this.showToast('Duplicate failed: ' + e.message, 'error'); }
                     }
                 };
             }

@@ -75,6 +75,7 @@ func registerRoutes(mux *http.ServeMux, cfg runtimeConfig) {
 	mux.Handle("/static/", http.FileServer(http.FS(staticFS)))
 
 	mux.HandleFunc("/", indexHandler)
+	mux.HandleFunc("/dashboard", dashboardHandler)
 	mux.HandleFunc("/projects", projectsHandler)
 	mux.HandleFunc("/agents", agentsPlaceholderHandler)
 	mux.HandleFunc("/runs", runsPlaceholderHandler)
