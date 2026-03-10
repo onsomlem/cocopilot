@@ -5,7 +5,7 @@ VERSION := $(shell cat VERSION 2>/dev/null || echo dev)
 LDFLAGS := -ldflags "-X github.com/onsomlem/cocopilot/server.Version=$(VERSION)"
 CMD := ./cmd/cocopilot
 
-.PHONY: build build-all test test-coverage bench clean lint run docker-build docker-run release verify-release verify-repo gate help
+.PHONY: build build-all test test-coverage bench clean lint run docker-build docker-run release verify-release verify-repo verify-source gate fresh-test help
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -143,11 +143,46 @@ verify-repo: ## Check git index for banned artifacts
 	fi && \
 	echo "OK: Repo is clean"
 
+verify-source: ## Check working tree for forbidden artifacts
+	@echo "=== Verifying source tree ===" && \
+	FAILED=0 && \
+	if find . -maxdepth 1 -name "*.db" -o -name "*.db-shm" -o -name "*.db-wal" | grep -q .; then \
+		echo "FAIL: database files in repo root"; FAILED=1; \
+	fi && \
+	if find . -maxdepth 1 -name "*.zip" | grep -q .; then \
+		echo "FAIL: zip archives in repo root"; FAILED=1; \
+	fi && \
+	if find . -maxdepth 1 -name "*.exe~" | grep -q .; then \
+		echo "FAIL: stale binary artifacts in repo root"; FAILED=1; \
+	fi && \
+	if [ -f ./cocopilot ] && file ./cocopilot | grep -qE 'Mach-O|ELF|PE32'; then \
+		echo "FAIL: compiled binary 'cocopilot' in repo root"; FAILED=1; \
+	fi && \
+	if find . -type d -name "__MACOSX" | grep -q .; then \
+		echo "FAIL: __MACOSX directories in tree"; FAILED=1; \
+	fi && \
+	if find . -name ".DS_Store" | grep -q .; then \
+		echo "FAIL: .DS_Store files in tree"; FAILED=1; \
+	fi && \
+	if find . -name "coverage.out" | grep -q .; then \
+		echo "FAIL: coverage.out in tree"; FAILED=1; \
+	fi && \
+	if [ "$$FAILED" -eq 1 ]; then \
+		echo "FAIL: Source tree contains forbidden artifacts"; \
+		echo "Hint: run 'make clean' or remove files manually"; \
+		exit 1; \
+	fi && \
+	echo "OK: Source tree is clean"
+
 gate: ## Hard release gate: all checks must pass before shipping
 	@echo "=== Release Gate ===" && \
-	echo "[1/5] Repo cleanliness..." && $(MAKE) -s verify-repo && \
-	echo "[2/5] Lint..." && $(MAKE) -s lint && \
-	echo "[3/5] Build..." && $(MAKE) -s build && \
-	echo "[4/5] Tests (race + golden path)..." && go test -race -timeout 180s ./... && \
-	echo "[5/5] Verify release..." && $(MAKE) -s release && $(MAKE) -s verify-release && \
+	echo "[1/6] Repo cleanliness (git index)..." && $(MAKE) -s verify-repo && \
+	echo "[2/6] Source tree cleanliness..." && $(MAKE) -s verify-source && \
+	echo "[3/6] Lint..." && $(MAKE) -s lint && \
+	echo "[4/6] Build..." && $(MAKE) -s build && \
+	echo "[5/6] Tests (race + golden path)..." && go test -race -timeout 180s ./... && \
+	echo "[6/6] Verify release..." && $(MAKE) -s release && $(MAKE) -s verify-release && \
 	echo "" && echo "=== ALL GATES PASSED ==="
+
+fresh-test: ## Clone into temp dir and validate build+test+package from scratch
+	bash scripts/fresh-machine-test.sh

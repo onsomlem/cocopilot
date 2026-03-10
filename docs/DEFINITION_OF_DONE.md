@@ -31,6 +31,8 @@ A change is **not done** unless every item below is satisfied.
 ### 6. Documentation
 
 - [ ] Docs affected by the change are updated (API docs, quickstart, migration notes, etc.).
+- [ ] `docs/TESTING_STRATEGY.md` reflects current test categories and counts.
+- [ ] No stale "untested" or "TODO" claims remain in docs for features that now have tests.
 - [ ] New environment variables are documented in AGENTS.md and README.md.
 - [ ] New migration files follow the naming convention (`NNNN_description.sql`).
 

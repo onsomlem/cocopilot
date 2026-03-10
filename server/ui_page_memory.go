@@ -1,0 +1,81 @@
+package server
+
+import (
+"fmt"
+"net/http"
+"strings"
+)
+
+func memoryPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/memory" {
+		http.NotFound(w, r)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	var b strings.Builder
+	b.WriteString(subPageHead("Memory"))
+	b.WriteString("<style>")
+	b.WriteString(".form{display:grid;gap:10px;margin:12px 0 16px;}")
+	b.WriteString(".row{display:flex;gap:12px;flex-wrap:wrap;}")
+	b.WriteString(".form-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}")
+	b.WriteString("</style>")
+	b.WriteString("<div class=\"card\">")
+	b.WriteString("<h1>Memory</h1>")
+	b.WriteString("<p>Stored key-value pairs for the selected project</p>")
+	b.WriteString("<div class=\"meta\"><span id=\"memory-status\">Loading...</span>")
+	b.WriteString("<button class=\"btn\" id=\"memory-refresh\" type=\"button\">Refresh</button></div>")
+	b.WriteString("<form class=\"form\" id=\"memory-form\">")
+	b.WriteString("<div class=\"row\">")
+	b.WriteString("<label class=\"field\">Scope<input class=\"input\" id=\"memory-scope\" name=\"scope\" placeholder=\"GLOBAL\" required></label>")
+	b.WriteString("<label class=\"field\">Key<input class=\"input\" id=\"memory-key\" name=\"key\" placeholder=\"release_notes\" required></label>")
+	b.WriteString("</div>")
+	b.WriteString("<label class=\"field\">Value JSON<textarea class=\"textarea\" id=\"memory-value\" name=\"value\" placeholder='{\"note\":\"...\"}' required></textarea></label>")
+	b.WriteString("<div class=\"form-actions\"><button class=\"btn\" id=\"memory-submit\" type=\"submit\">Save</button><span class=\"muted\" id=\"memory-form-status\"></span></div>")
+	b.WriteString("</form>")
+	b.WriteString("<table><thead><tr><th>Scope</th><th>Key</th><th>Updated</th></tr></thead>")
+	b.WriteString("<tbody id=\"memory-body\"><tr><td colspan=\"3\">Loading...</td></tr></tbody></table>")
+	b.WriteString("</div>")
+	b.WriteString("<script>")
+	b.WriteString("const bodyEl=document.getElementById('memory-body');")
+	b.WriteString("const statusEl=document.getElementById('memory-status');")
+	b.WriteString("const refreshBtn=document.getElementById('memory-refresh');")
+	b.WriteString("const formEl=document.getElementById('memory-form');")
+	b.WriteString("const scopeEl=document.getElementById('memory-scope');")
+	b.WriteString("const keyEl=document.getElementById('memory-key');")
+	b.WriteString("const valueEl=document.getElementById('memory-value');")
+	b.WriteString("const formStatusEl=document.getElementById('memory-form-status');")
+	b.WriteString("function getProjectID(){return cocoProject.get();}")
+	b.WriteString("window.addEventListener('coco:project-changed',loadMemory);")
+	b.WriteString("async function loadMemory(){const pid=getProjectID();statusEl.textContent='Loading...';")
+	b.WriteString("bodyEl.innerHTML='<tr><td colspan=\"3\">Loading...</td></tr>';try{")
+	b.WriteString("const res=await fetch('/api/v2/projects/'+encodeURIComponent(pid)+'/memory?limit=50');")
+	b.WriteString("if(!res.ok)throw new Error('http '+res.status);")
+	b.WriteString("const data=await res.json();const items=Array.isArray(data.items)?data.items:[];")
+	b.WriteString("statusEl.textContent=items.length+' items';")
+	b.WriteString("if(items.length===0){bodyEl.innerHTML='<tr><td colspan=\"3\">No memory entries yet. Use the API or form above to store key-value data.</td></tr>';return;}")
+	b.WriteString("bodyEl.innerHTML='';items.forEach((item)=>{")
+	b.WriteString("const tr=document.createElement('tr');")
+	b.WriteString("const scope=escapeHtml(item.scope);const key=escapeHtml(item.key);")
+	b.WriteString("const updated=escapeHtml(item.updated_at||'');")
+	b.WriteString("tr.innerHTML='<td>'+scope+'</td><td>'+key+'</td><td>'+updated+'</td>';bodyEl.appendChild(tr);});")
+	b.WriteString("}catch(err){statusEl.textContent='Failed to load memory';")
+	b.WriteString("bodyEl.innerHTML='<tr><td colspan=\"3\">Error loading memory</td></tr>';}}")
+	b.WriteString("async function submitMemory(event){event.preventDefault();")
+	b.WriteString("const scope=String(scopeEl.value||'').trim();")
+	b.WriteString("const key=String(keyEl.value||'').trim();")
+	b.WriteString("const rawValue=String(valueEl.value||'').trim();")
+	b.WriteString("if(!scope||!key||!rawValue){formStatusEl.textContent='Scope, key, and value are required.';return;}")
+	b.WriteString("let valueJson=null;try{valueJson=JSON.parse(rawValue);}catch(err){formStatusEl.textContent='Value must be valid JSON.';return;}")
+	b.WriteString("formStatusEl.textContent='Saving...';")
+	b.WriteString("try{const pid=getProjectID();const res=await fetch('/api/v2/projects/'+encodeURIComponent(pid)+'/memory',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({scope:scope,key:key,value:valueJson})});")
+	b.WriteString("if(!res.ok)throw new Error('http '+res.status);")
+	b.WriteString("formStatusEl.textContent='Saved.';await loadMemory();}catch(err){formStatusEl.textContent='Save failed.';}}")
+	b.WriteString("refreshBtn.addEventListener('click',loadMemory);")
+	b.WriteString("formEl.addEventListener('submit',submitMemory);")
+	b.WriteString("loadMemory();")
+	b.WriteString("</script>")
+	b.WriteString(subPageFoot())
+	fmt.Fprint(w, b.String())
+}
+

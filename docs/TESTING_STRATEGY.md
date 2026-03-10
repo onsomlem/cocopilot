@@ -47,6 +47,8 @@ dependencies.
 | Config | `TestLoadRuntime*` | 8 | Environment / config parsing |
 | Prompt runner | `TestPromptRunner*` | 8 | Planning prompt generation |
 | Loop anchor | `TestLoopAnchor*` | 4 | Loop-anchor prompts |
+| Templates | `TestV2Templates*` | 7 | Template CRUD, instantiation |
+| Approval | `TestV2TaskApproval*` | 6 | Task approval and rejection flows |
 
 ## Test Database Setup
 
@@ -96,7 +98,8 @@ func TestSomething(t *testing.T) {
 | `make test-e2e` | `go test -run "TestE2E\|TestScannerE2E" ./server/` | End-to-end tests |
 | `make test-coverage` | Runs tests + prints coverage % | Coverage report |
 | `make test-ci` | Build + test + coverage ≥ 65% gate | CI pipeline |
-| `make gate` | verify-repo → lint → build → test -race → release + verify-release | **Hard release gate** |
+| `make gate` | verify-repo → verify-source → lint → build → test -race → release + verify-release | **Hard release gate** |
+| `make verify-source` | Fails on .db, .zip, binaries, .DS_Store, coverage.out in tree | Source tree hygiene |
 | `make bench` | `go test -bench . -benchtime 5x -timeout 60s ./server/` | Benchmarks |
 
 ## Naming Conventions

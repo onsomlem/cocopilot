@@ -1,0 +1,81 @@
+package server
+
+import (
+"fmt"
+"net/http"
+"strings"
+)
+
+func auditPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/audit" {
+		http.NotFound(w, r)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	var b strings.Builder
+	b.WriteString(subPageHead("Audit"))
+	b.WriteString("<style>")
+	b.WriteString("ul{list-style:none;padding:0;margin:0;}")
+	b.WriteString("li{padding:10px 8px;border-bottom:1px solid #3c3c3c;font-size:12px;display:grid;grid-template-columns:2fr 2fr 2fr 2fr 3fr;gap:12px;}")
+	b.WriteString("li.header{color:#0078d4;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #505050;}")
+	b.WriteString(".payload-cell{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:#a0a0a0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;cursor:pointer;}")
+	b.WriteString(".payload-cell:hover{white-space:normal;overflow:visible;color:#ccc;}")
+	b.WriteString(".audit-filters{display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin-bottom:12px;}")
+	b.WriteString(".audit-filters label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:#858585;}")
+	b.WriteString(".audit-filters select,.audit-filters input{padding:4px 8px;background:#2a2d2e;border:1px solid #3c3c3c;color:#ccc;border-radius:4px;font-size:12px;}")
+	b.WriteString("</style>")
+	b.WriteString("<div class=\"card\">")
+	b.WriteString("<h1>Audit Log</h1>")
+	b.WriteString("<p class=\"muted\">Audit events tracking sensitive operations: policy changes, project updates, task deletions, workdir changes.</p>")
+	b.WriteString("<div class=\"audit-filters\">")
+	b.WriteString("<label>Event Type<select id=\"audit-type\">")
+	b.WriteString("<option value=\"\">All audit events</option>")
+	b.WriteString("<option value=\"audit.policy.changed\">Policy Changed</option>")
+	b.WriteString("<option value=\"audit.project.updated\">Project Updated</option>")
+	b.WriteString("<option value=\"audit.task.deleted\">Task Deleted</option>")
+	b.WriteString("<option value=\"audit.workdir.changed\">Workdir Changed</option>")
+	b.WriteString("</select></label>")
+	b.WriteString("<label>Project<select class=\"select\" id=\"audit-project\"><option value=\"\">All projects</option></select></label>")
+	b.WriteString("<button class=\"btn\" id=\"audit-refresh\" type=\"button\">Refresh</button>")
+	b.WriteString("</div>")
+	b.WriteString("<div class=\"meta\"><span id=\"audit-status\">Loading...</span></div>")
+	b.WriteString("<ul id=\"audit-list\"><li>Loading...</li></ul>")
+	b.WriteString("</div>")
+	b.WriteString("<script>")
+	b.WriteString("const listEl=document.getElementById('audit-list');")
+	b.WriteString("const statusEl=document.getElementById('audit-status');")
+	b.WriteString("const refreshBtn=document.getElementById('audit-refresh');")
+	b.WriteString("const typeEl=document.getElementById('audit-type');")
+	b.WriteString("const projectEl=document.getElementById('audit-project');")
+	b.WriteString("function renderHeader(){listEl.innerHTML='';")
+	b.WriteString("const header=document.createElement('li');header.className='header';")
+	b.WriteString("header.innerHTML='<span>Kind</span><span>Entity</span><span>Project</span><span>Time</span><span>Details</span>';listEl.appendChild(header);}")
+	b.WriteString("async function loadAudit(){statusEl.textContent='Loading...';")
+	b.WriteString("listEl.innerHTML='<li>Loading...</li>';try{")
+	b.WriteString("const params=new URLSearchParams();params.set('limit','100');")
+	b.WriteString("const type=String(typeEl.value||'').trim();if(type){params.set('type',type);}")
+	b.WriteString("const projectId=String(projectEl.value||'').trim();if(projectId){params.set('project_id',projectId);}")
+	b.WriteString("const url='/api/v2/audit?'+params.toString();")
+	b.WriteString("const res=await fetch(url);if(!res.ok)throw new Error();")
+	b.WriteString("const data=await res.json();const events=Array.isArray(data.events)?data.events:[];")
+	b.WriteString("statusEl.textContent=events.length+' of '+data.total+' audit events';renderHeader();")
+	b.WriteString("if(events.length===0){const empty=document.createElement('li');")
+	b.WriteString("empty.innerHTML='<span class=\"muted\">No audit events</span>';listEl.appendChild(empty);return;}")
+	b.WriteString("events.forEach((ev)=>{const item=document.createElement('li');")
+	b.WriteString("const kind=escapeHtml(ev.kind);const entity=escapeHtml(ev.entity_type+'/'+ev.entity_id);")
+	b.WriteString("const proj=escapeHtml(ev.project_id);const created=escapeHtml(ev.created_at);")
+	b.WriteString("const payload=ev.payload?escapeHtml(JSON.stringify(ev.payload)):'';")
+	b.WriteString("item.innerHTML='<span>'+kind+'</span><span>'+entity+'</span><span>'+proj+'</span><span>'+created+'</span><span class=\"payload-cell\" title=\"'+payload+'\">'+payload+'</span>';listEl.appendChild(item);});")
+	b.WriteString("}catch(err){statusEl.textContent='Failed to load audit events';")
+	b.WriteString("listEl.innerHTML='<li>Error loading audit events</li>';}}")
+	b.WriteString("function handleEnter(e){if(e.key==='Enter'){loadAudit();}}")
+	b.WriteString("refreshBtn.addEventListener('click',loadAudit);")
+	b.WriteString("typeEl.addEventListener('change',loadAudit);")
+	b.WriteString("projectEl.addEventListener('keydown',handleEnter);")
+	b.WriteString("loadAudit();")
+	b.WriteString("</script>")
+	b.WriteString(subPageFoot())
+	fmt.Fprint(w, b.String())
+}
+

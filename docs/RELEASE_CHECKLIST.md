@@ -53,6 +53,14 @@ Run this against a **fresh clone** using only the README. Every step must pass.
 - [ ] `make lint` passes
 - [ ] CI workflow passes on push to main
 
+### Documentation Governance
+
+- [ ] Docs affected by the change are updated (API docs, quickstart, migration notes)
+- [ ] `docs/TESTING_STRATEGY.md` reflects current test categories and counts
+- [ ] No stale "untested" or "TODO" claims remain in docs for features that now have tests
+- [ ] New environment variables documented in AGENTS.md and README.md
+- [ ] New migrations follow naming convention (`NNNN_description.sql`)
+
 ## Blocker Classification
 
 After running the checklist, classify every issue:
