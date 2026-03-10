@@ -1027,6 +1027,10 @@ func v2TaskDetailRouteHandler(w http.ResponseWriter, r *http.Request) {
 		v2TaskRejectHandler(w, r, parts[0])
 		return
 	}
+	if len(parts) == 2 && parts[1] == "handoff" {
+		v2TaskHandoffHandler(w, r)
+		return
+	}
 	if len(parts) == 1 {
 		switch r.Method {
 		case http.MethodGet:

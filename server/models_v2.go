@@ -45,6 +45,11 @@ type DashboardFailure = models.DashboardFailure
 type DashboardAutoEvent = models.DashboardAutoEvent
 type DashboardRecommendation = models.DashboardRecommendation
 type DashboardStalledTask = models.DashboardStalledTask
+type PlanningState = models.PlanningState
+type Workstream = models.Workstream
+type PlanningCycle = models.PlanningCycle
+type PlannerDecision = models.PlannerDecision
+type PromptTemplate = models.PromptTemplate
 
 // Constants re-exported.
 const (

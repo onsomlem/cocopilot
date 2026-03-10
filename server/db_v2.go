@@ -362,3 +362,78 @@ func emitLeaseLifecycleEvent(db *sql.DB, kind string, lease *Lease, extra map[st
 	return dbstore.EmitLeaseLifecycleEvent(db, kind, lease, extra)
 }
 
+// ---- Planning ----
+
+func GetPlanningState(db *sql.DB, projectID string) (*PlanningState, error) {
+	return dbstore.GetPlanningState(db, projectID)
+}
+func CreatePlanningState(db *sql.DB, projectID string) (*PlanningState, error) {
+	return dbstore.CreatePlanningState(db, projectID)
+}
+func UpdatePlanningState(db *sql.DB, ps *PlanningState) error {
+	return dbstore.UpdatePlanningState(db, ps)
+}
+func GetOrCreatePlanningState(db *sql.DB, projectID string) (*PlanningState, error) {
+	return dbstore.GetOrCreatePlanningState(db, projectID)
+}
+func SeedPlanningState(db *sql.DB, projectID string) (*PlanningState, error) {
+	return dbstore.SeedPlanningState(db, projectID)
+}
+func CreateWorkstream(db *sql.DB, projectID, planningStateID, title, description, why, whatNext string) (*Workstream, error) {
+	return dbstore.CreateWorkstream(db, projectID, planningStateID, title, description, why, whatNext)
+}
+func GetWorkstream(db *sql.DB, projectID, workstreamID string) (*Workstream, error) {
+	return dbstore.GetWorkstream(db, projectID, workstreamID)
+}
+func ListWorkstreams(db *sql.DB, projectID string, statusFilter string) ([]Workstream, error) {
+	return dbstore.ListWorkstreams(db, projectID, statusFilter)
+}
+func UpdateWorkstream(db *sql.DB, ws *Workstream) error {
+	return dbstore.UpdateWorkstream(db, ws)
+}
+func DeleteWorkstream(db *sql.DB, projectID, workstreamID string) error {
+	return dbstore.DeleteWorkstream(db, projectID, workstreamID)
+}
+func CreatePlanningCycle(db *sql.DB, projectID string, cycleNumber int, planningMode string) (*PlanningCycle, error) {
+	return dbstore.CreatePlanningCycle(db, projectID, cycleNumber, planningMode)
+}
+func CompletePlanningCycle(db *sql.DB, pc *PlanningCycle) error {
+	return dbstore.CompletePlanningCycle(db, pc)
+}
+func GetPlanningCycle(db *sql.DB, cycleID string) (*PlanningCycle, error) {
+	return dbstore.GetPlanningCycle(db, cycleID)
+}
+func ListPlanningCycles(db *sql.DB, projectID string, limit int) ([]PlanningCycle, error) {
+	return dbstore.ListPlanningCycles(db, projectID, limit)
+}
+func CreatePlannerDecision(db *sql.DB, projectID, cycleID, stage, decisionType, subject, reasoning string) (*PlannerDecision, error) {
+	return dbstore.CreatePlannerDecision(db, projectID, cycleID, stage, decisionType, subject, reasoning)
+}
+func ListPlannerDecisions(db *sql.DB, projectID string, cycleID string, limit int) ([]PlannerDecision, error) {
+	return dbstore.ListPlannerDecisions(db, projectID, cycleID, limit)
+}
+
+// ---- Prompt Templates ----
+
+func CreatePromptTemplate(db *sql.DB, projectID, role, name, systemPrompt, userTemplate string, description, outputSchema *string) (*PromptTemplate, error) {
+	return dbstore.CreatePromptTemplate(db, projectID, role, name, systemPrompt, userTemplate, description, outputSchema)
+}
+func GetPromptTemplate(db *sql.DB, id string) (*PromptTemplate, error) {
+	return dbstore.GetPromptTemplate(db, id)
+}
+func GetActivePromptByRole(db *sql.DB, projectID, role string) (*PromptTemplate, error) {
+	return dbstore.GetActivePromptByRole(db, projectID, role)
+}
+func ListPromptTemplates(db *sql.DB, projectID, role string, activeOnly bool) ([]PromptTemplate, error) {
+	return dbstore.ListPromptTemplates(db, projectID, role, activeOnly)
+}
+func UpdatePromptTemplate(db *sql.DB, pt *PromptTemplate) error {
+	return dbstore.UpdatePromptTemplate(db, pt)
+}
+func ActivatePromptVersion(db *sql.DB, projectID, role string, version int) error {
+	return dbstore.ActivatePromptVersion(db, projectID, role, version)
+}
+func DeletePromptTemplate(db *sql.DB, id string) error {
+	return dbstore.DeletePromptTemplate(db, id)
+}
+

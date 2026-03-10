@@ -568,3 +568,109 @@ func RunStatusIsSuccessful(status RunStatus) bool {
 func RunStatusIsFailed(status RunStatus) bool {
 	return status == RunStatusFailed
 }
+
+// ===== Planning State Types =====
+
+// PlanningMode represents how the planner should behave.
+type PlanningMode string
+
+const (
+	PlanningModeStandard    PlanningMode = "standard"
+	PlanningModeFocused     PlanningMode = "focused"
+	PlanningModeRecovery    PlanningMode = "recovery"
+	PlanningModeMaintenance PlanningMode = "maintenance"
+)
+
+// PlanningState holds the per-project planning state for the staged planner.
+type PlanningState struct {
+	ID             string   `json:"id"`
+	ProjectID      string   `json:"project_id"`
+	PlanningMode   string   `json:"planning_mode"`
+	CycleCount     int      `json:"cycle_count"`
+	LastCycleAt    *string  `json:"last_cycle_at,omitempty"`
+	Goals          []string `json:"goals"`
+	ReleaseFocus   string   `json:"release_focus"`
+	MustNotForget  []string `json:"must_not_forget"`
+	ReconSummary   string   `json:"recon_summary"`
+	PlannerSummary string   `json:"planner_summary"`
+	Blockers       []string `json:"blockers"`
+	Risks          []string `json:"risks"`
+	PriorityOrder  []string `json:"priority_order"`
+	CreatedAt      string   `json:"created_at"`
+	UpdatedAt      string   `json:"updated_at"`
+}
+
+// WorkstreamStatus constants.
+const (
+	WorkstreamStatusActive    = "active"
+	WorkstreamStatusPaused    = "paused"
+	WorkstreamStatusCompleted = "completed"
+	WorkstreamStatusAbandoned = "abandoned"
+)
+
+// Workstream represents a logical thread of work tracked across planning cycles.
+type Workstream struct {
+	ID              string  `json:"id"`
+	ProjectID       string  `json:"project_id"`
+	PlanningStateID string  `json:"planning_state_id"`
+	Title           string  `json:"title"`
+	Description     string  `json:"description"`
+	Status          string  `json:"status"`
+	ContinuityScore float64 `json:"continuity_score"`
+	UrgencyScore    float64 `json:"urgency_score"`
+	RelatedTaskIDs  []int   `json:"related_task_ids"`
+	RelatedRunIDs   []int   `json:"related_run_ids"`
+	Why             string  `json:"why"`
+	WhatRemains     string  `json:"what_remains"`
+	WhatNext        string  `json:"what_next"`
+	CreatedAt       string  `json:"created_at"`
+	UpdatedAt       string  `json:"updated_at"`
+}
+
+// PlanningCycle records input/output of a completed planning cycle.
+type PlanningCycle struct {
+	ID                  string                 `json:"id"`
+	ProjectID           string                 `json:"project_id"`
+	CycleNumber         int                    `json:"cycle_number"`
+	PlanningMode        string                 `json:"planning_mode"`
+	StartedAt           string                 `json:"started_at"`
+	CompletedAt         *string                `json:"completed_at,omitempty"`
+	ReconOutput         map[string]interface{} `json:"recon_output"`
+	ContinuityOutput    map[string]interface{} `json:"continuity_output"`
+	GapOutput           map[string]interface{} `json:"gap_output"`
+	PrioritizationOutput map[string]interface{} `json:"prioritization_output"`
+	SynthesisOutput     map[string]interface{} `json:"synthesis_output"`
+	AntiDriftOutput     map[string]interface{} `json:"anti_drift_output"`
+	TasksCreated        []int                  `json:"tasks_created"`
+	CoherenceScore      float64                `json:"coherence_score"`
+	StageFailures       []string               `json:"stage_failures"`
+	DriftWarnings       []string               `json:"drift_warnings"`
+}
+
+// PlannerDecision records a single decision made during a planning cycle.
+type PlannerDecision struct {
+	ID           string `json:"id"`
+	ProjectID    string `json:"project_id"`
+	CycleID      string `json:"cycle_id"`
+	Stage        string `json:"stage"`
+	DecisionType string `json:"decision_type"`
+	Subject      string `json:"subject"`
+	Reasoning    string `json:"reasoning"`
+	CreatedAt    string `json:"created_at"`
+}
+
+// PromptTemplate represents a versioned prompt template for a specific role.
+type PromptTemplate struct {
+	ID           string  `json:"id"`
+	ProjectID    string  `json:"project_id"`
+	Role         string  `json:"role"`
+	Version      int     `json:"version"`
+	Name         string  `json:"name"`
+	Description  *string `json:"description,omitempty"`
+	SystemPrompt string  `json:"system_prompt"`
+	UserTemplate string  `json:"user_template"`
+	OutputSchema *string `json:"output_schema,omitempty"`
+	IsActive     bool    `json:"is_active"`
+	CreatedAt    string  `json:"created_at"`
+	UpdatedAt    string  `json:"updated_at"`
+}

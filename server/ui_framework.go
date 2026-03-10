@@ -167,6 +167,7 @@ func pageNav() string {
 		`<a href="/dependencies">Dependencies</a>` +
 		`<a href="/memory">Memory</a>` +
 		`<a href="/policies">Policies</a>` +
+		`<a href="/planning">Planning</a>` +
 		`<a href="/context-packs">Context Packs</a>` +
 		`<a href="/audit">Audit Log</a>` +
 		`<a href="/health">Health</a>` +

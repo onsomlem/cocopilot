@@ -212,6 +212,9 @@ func Main() {
 		}
 	}()
 
+	// Start planning pipeline background trigger
+	StartPlanningTrigger(db, 15*time.Minute)
+
 	handler := withCORS(withRequestLog(mux))
 	log.Fatal(http.ListenAndServe(cfg.HTTPAddr, handler))
 }

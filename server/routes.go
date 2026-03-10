@@ -93,6 +93,7 @@ func registerRoutes(mux *http.ServeMux, cfg runtimeConfig) {
 	mux.HandleFunc("/diffs/", diffViewerHandler)
 	mux.HandleFunc("/settings", settingsHandler)
 	mux.HandleFunc("/health", healthDashboardHandler)
+	mux.HandleFunc("/planning", planningPanelHandler)
 	mux.HandleFunc("/graphs/repo", repoGraphHandler)
 	mux.HandleFunc("/api/tasks", apiTasksHandler)
 	mux.HandleFunc("/events", eventsHandler(heartbeatInterval, v1EventsReplayLimitMax))
@@ -265,6 +266,75 @@ func v2ProjectRouteHandler(heartbeatInterval time.Duration, replayLimitMax int) 
 		}
 		if strings.Contains(r.URL.Path, "/templates/") {
 			v2ProjectTemplateDetailHandler(w, r)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/planning/run") {
+			v2ProjectPlanningCycleHandler(w, r)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/planning/cycles") {
+			v2ProjectPlanningCyclesHandler(w, r)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/planning/decisions") {
+			v2ProjectDecisionsHandler(w, r)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/planning/quality") {
+			v2ProjectPlanningQualityHandler(w, r)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/planning/seed-prompts") {
+			v2ProjectSeedPromptsHandler(w, r)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/planning") {
+			v2ProjectPlanningHandler(w, r)
+			return
+		}
+		if strings.Contains(r.URL.Path, "/workstreams/") {
+			v2ProjectWorkstreamDetailHandler(w, r)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/workstreams") {
+			v2ProjectWorkstreamsHandler(w, r)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/prompts/activate") {
+			projectID := extractProjectID(r)
+			v2ProjectPromptActivateHandler(w, r, projectID)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/prompts/test-run") {
+			projectID := extractProjectID(r)
+			v2ProjectPromptTestRunHandler(w, r, projectID)
+			return
+		}
+		if strings.Contains(r.URL.Path, "/prompts/role/") {
+			projectID := extractProjectID(r)
+			parts := strings.Split(r.URL.Path, "/prompts/role/")
+			if len(parts) == 2 {
+				roleParts := strings.Split(parts[1], "/")
+				role := roleParts[0]
+				v2ProjectPromptVersionsHandler(w, r, projectID, role)
+			} else {
+				writeV2Error(w, 400, "INVALID_PATH", "Invalid prompt role path", nil)
+			}
+			return
+		}
+		if strings.Contains(r.URL.Path, "/prompts/") {
+			projectID := extractProjectID(r)
+			parts := strings.Split(r.URL.Path, "/prompts/")
+			promptID := ""
+			if len(parts) == 2 {
+				promptID = strings.Split(parts[1], "/")[0]
+			}
+			v2ProjectPromptDetailHandler(w, r, projectID, promptID)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/prompts") {
+			projectID := extractProjectID(r)
+			v2ProjectPromptsHandler(w, r, projectID)
 			return
 		}
 
