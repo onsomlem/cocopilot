@@ -63,8 +63,8 @@ func setTaskAutomationDepth(db *sql.DB, taskID int, depth int) error {
 func CreateTaskV2(db *sql.DB, instructions string, projectID string, parentTaskID *int) (*TaskV2, error) {
 	return dbstore.CreateTaskV2(db, instructions, projectID, parentTaskID)
 }
-func CreateTaskV2WithMeta(db *sql.DB, instructions string, projectID string, parentTaskID *int, title *string, taskType *TaskType, priority *int, tags []string) (*TaskV2, error) {
-	return dbstore.CreateTaskV2WithMeta(db, instructions, projectID, parentTaskID, title, taskType, priority, tags)
+func CreateTaskV2WithMeta(db *sql.DB, instructions string, projectID string, parentTaskID *int, title *string, taskType *TaskType, priority *int, tags []string, loopAnchorPrompt *string) (*TaskV2, error) {
+	return dbstore.CreateTaskV2WithMeta(db, instructions, projectID, parentTaskID, title, taskType, priority, tags, loopAnchorPrompt)
 }
 func UpdateTaskV2(db *sql.DB, taskID int, instructions *string, statusV1 *TaskStatus, statusV2 *TaskStatusV2, projectID *string, parentTaskID *int) (*TaskV2, error) {
 	return dbstore.UpdateTaskV2(db, taskID, instructions, statusV1, statusV2, projectID, parentTaskID)
@@ -336,8 +336,8 @@ func GetProjectDashboardData(db *sql.DB, projectID string) (*DashboardData, erro
 
 // ---- Templates ----
 
-func CreateTaskTemplate(db *sql.DB, projectID, name string, description *string, instructions string, defaultType *string, defaultPriority int, defaultTags []string, defaultMetadata map[string]interface{}) (*TaskTemplate, error) {
-	return dbstore.CreateTaskTemplate(db, projectID, name, description, instructions, defaultType, defaultPriority, defaultTags, defaultMetadata)
+func CreateTaskTemplate(db *sql.DB, projectID, name string, description *string, instructions string, defaultType *string, defaultPriority int, defaultTags []string, defaultMetadata map[string]interface{}, defaultLoopAnchor *string) (*TaskTemplate, error) {
+	return dbstore.CreateTaskTemplate(db, projectID, name, description, instructions, defaultType, defaultPriority, defaultTags, defaultMetadata, defaultLoopAnchor)
 }
 func GetTaskTemplate(db *sql.DB, templateID string) (*TaskTemplate, error) {
 	return dbstore.GetTaskTemplate(db, templateID)
@@ -345,8 +345,8 @@ func GetTaskTemplate(db *sql.DB, templateID string) (*TaskTemplate, error) {
 func ListTaskTemplates(db *sql.DB, projectID string) ([]TaskTemplate, error) {
 	return dbstore.ListTaskTemplates(db, projectID)
 }
-func UpdateTaskTemplate(db *sql.DB, templateID string, name *string, description *string, instructions *string, defaultType *string, defaultPriority *int, defaultTags []string, defaultMetadata map[string]interface{}) (*TaskTemplate, error) {
-	return dbstore.UpdateTaskTemplate(db, templateID, name, description, instructions, defaultType, defaultPriority, defaultTags, defaultMetadata)
+func UpdateTaskTemplate(db *sql.DB, templateID string, name *string, description *string, instructions *string, defaultType *string, defaultPriority *int, defaultTags []string, defaultMetadata map[string]interface{}, defaultLoopAnchor *string) (*TaskTemplate, error) {
+	return dbstore.UpdateTaskTemplate(db, templateID, name, description, instructions, defaultType, defaultPriority, defaultTags, defaultMetadata, defaultLoopAnchor)
 }
 func DeleteTaskTemplate(db *sql.DB, templateID string) error {
 	return dbstore.DeleteTaskTemplate(db, templateID)

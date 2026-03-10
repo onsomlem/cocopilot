@@ -8,19 +8,20 @@ import (
 	"github.com/onsomlem/cocopilot/internal/models"
 )
 
-func CreateTaskTemplate(db *sql.DB, projectID, name string, description *string, instructions string, defaultType *string, defaultPriority int, defaultTags []string, defaultMetadata map[string]interface{}) (*models.TaskTemplate, error) {
+func CreateTaskTemplate(db *sql.DB, projectID, name string, description *string, instructions string, defaultType *string, defaultPriority int, defaultTags []string, defaultMetadata map[string]interface{}, defaultLoopAnchor *string) (*models.TaskTemplate, error) {
 	t := &models.TaskTemplate{
-		ID:              "tmpl_" + uuid.New().String(),
-		ProjectID:       projectID,
-		Name:            name,
-		Description:     description,
-		Instructions:    instructions,
-		DefaultType:     defaultType,
-		DefaultPriority: defaultPriority,
-		DefaultTags:     defaultTags,
-		DefaultMetadata: defaultMetadata,
-		CreatedAt:       models.NowISO(),
-		UpdatedAt:       models.NowISO(),
+		ID:                "tmpl_" + uuid.New().String(),
+		ProjectID:         projectID,
+		Name:              name,
+		Description:       description,
+		Instructions:      instructions,
+		DefaultType:       defaultType,
+		DefaultPriority:   defaultPriority,
+		DefaultTags:       defaultTags,
+		DefaultMetadata:   defaultMetadata,
+		DefaultLoopAnchor: defaultLoopAnchor,
+		CreatedAt:         models.NowISO(),
+		UpdatedAt:         models.NowISO(),
 	}
 
 	tagsJSON, _ := models.MarshalJSON(defaultTags)
@@ -33,11 +34,15 @@ func CreateTaskTemplate(db *sql.DB, projectID, name string, description *string,
 	if defaultType != nil {
 		typeNull = sql.NullString{String: *defaultType, Valid: true}
 	}
+	anchorNull := sql.NullString{}
+	if defaultLoopAnchor != nil {
+		anchorNull = sql.NullString{String: *defaultLoopAnchor, Valid: true}
+	}
 
 	_, err := db.Exec(`
-		INSERT INTO task_templates (id, project_id, name, description, instructions, default_type, default_priority, default_tags, default_metadata, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, t.ID, t.ProjectID, t.Name, desc, t.Instructions, typeNull, t.DefaultPriority, tagsJSON, metaJSON, t.CreatedAt, t.UpdatedAt)
+		INSERT INTO task_templates (id, project_id, name, description, instructions, default_type, default_priority, default_tags, default_metadata, default_loop_anchor, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, t.ID, t.ProjectID, t.Name, desc, t.Instructions, typeNull, t.DefaultPriority, tagsJSON, metaJSON, anchorNull, t.CreatedAt, t.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create task template: %w", err)
 	}
@@ -46,12 +51,12 @@ func CreateTaskTemplate(db *sql.DB, projectID, name string, description *string,
 
 func GetTaskTemplate(db *sql.DB, templateID string) (*models.TaskTemplate, error) {
 	var t models.TaskTemplate
-	var desc, dtype, tagsJSON, metaJSON sql.NullString
+	var desc, dtype, tagsJSON, metaJSON, loopAnchor sql.NullString
 
 	err := db.QueryRow(`
-		SELECT id, project_id, name, description, instructions, default_type, default_priority, default_tags, default_metadata, created_at, updated_at
+		SELECT id, project_id, name, description, instructions, default_type, default_priority, default_tags, default_metadata, default_loop_anchor, created_at, updated_at
 		FROM task_templates WHERE id = ?
-	`, templateID).Scan(&t.ID, &t.ProjectID, &t.Name, &desc, &t.Instructions, &dtype, &t.DefaultPriority, &tagsJSON, &metaJSON, &t.CreatedAt, &t.UpdatedAt)
+	`, templateID).Scan(&t.ID, &t.ProjectID, &t.Name, &desc, &t.Instructions, &dtype, &t.DefaultPriority, &tagsJSON, &metaJSON, &loopAnchor, &t.CreatedAt, &t.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("template not found: %s", templateID)
 	}
@@ -70,12 +75,15 @@ func GetTaskTemplate(db *sql.DB, templateID string) (*models.TaskTemplate, error
 	if metaJSON.Valid && metaJSON.String != "" {
 		models.UnmarshalJSON(metaJSON.String, &t.DefaultMetadata)
 	}
+	if loopAnchor.Valid {
+		t.DefaultLoopAnchor = &loopAnchor.String
+	}
 	return &t, nil
 }
 
 func ListTaskTemplates(db *sql.DB, projectID string) ([]models.TaskTemplate, error) {
 	rows, err := db.Query(`
-		SELECT id, project_id, name, description, instructions, default_type, default_priority, default_tags, default_metadata, created_at, updated_at
+		SELECT id, project_id, name, description, instructions, default_type, default_priority, default_tags, default_metadata, default_loop_anchor, created_at, updated_at
 		FROM task_templates WHERE project_id = ? ORDER BY created_at ASC
 	`, projectID)
 	if err != nil {
@@ -86,8 +94,8 @@ func ListTaskTemplates(db *sql.DB, projectID string) ([]models.TaskTemplate, err
 	var templates []models.TaskTemplate
 	for rows.Next() {
 		var t models.TaskTemplate
-		var desc, dtype, tagsJSON, metaJSON sql.NullString
-		if err := rows.Scan(&t.ID, &t.ProjectID, &t.Name, &desc, &t.Instructions, &dtype, &t.DefaultPriority, &tagsJSON, &metaJSON, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		var desc, dtype, tagsJSON, metaJSON, loopAnchor sql.NullString
+		if err := rows.Scan(&t.ID, &t.ProjectID, &t.Name, &desc, &t.Instructions, &dtype, &t.DefaultPriority, &tagsJSON, &metaJSON, &loopAnchor, &t.CreatedAt, &t.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan template: %w", err)
 		}
 		if desc.Valid {
@@ -102,12 +110,15 @@ func ListTaskTemplates(db *sql.DB, projectID string) ([]models.TaskTemplate, err
 		if metaJSON.Valid && metaJSON.String != "" {
 			models.UnmarshalJSON(metaJSON.String, &t.DefaultMetadata)
 		}
+		if loopAnchor.Valid {
+			t.DefaultLoopAnchor = &loopAnchor.String
+		}
 		templates = append(templates, t)
 	}
 	return templates, nil
 }
 
-func UpdateTaskTemplate(db *sql.DB, templateID string, name *string, description *string, instructions *string, defaultType *string, defaultPriority *int, defaultTags []string, defaultMetadata map[string]interface{}) (*models.TaskTemplate, error) {
+func UpdateTaskTemplate(db *sql.DB, templateID string, name *string, description *string, instructions *string, defaultType *string, defaultPriority *int, defaultTags []string, defaultMetadata map[string]interface{}, defaultLoopAnchor *string) (*models.TaskTemplate, error) {
 	t, err := GetTaskTemplate(db, templateID)
 	if err != nil {
 		return nil, err
@@ -134,6 +145,9 @@ func UpdateTaskTemplate(db *sql.DB, templateID string, name *string, description
 	if defaultMetadata != nil {
 		t.DefaultMetadata = defaultMetadata
 	}
+	if defaultLoopAnchor != nil {
+		t.DefaultLoopAnchor = defaultLoopAnchor
+	}
 	t.UpdatedAt = models.NowISO()
 
 	tagsJSON, _ := models.MarshalJSON(t.DefaultTags)
@@ -146,11 +160,15 @@ func UpdateTaskTemplate(db *sql.DB, templateID string, name *string, description
 	if t.DefaultType != nil {
 		typeNull = sql.NullString{String: *t.DefaultType, Valid: true}
 	}
+	anchorNull := sql.NullString{}
+	if t.DefaultLoopAnchor != nil {
+		anchorNull = sql.NullString{String: *t.DefaultLoopAnchor, Valid: true}
+	}
 
 	_, err = db.Exec(`
-		UPDATE task_templates SET name = ?, description = ?, instructions = ?, default_type = ?, default_priority = ?, default_tags = ?, default_metadata = ?, updated_at = ?
+		UPDATE task_templates SET name = ?, description = ?, instructions = ?, default_type = ?, default_priority = ?, default_tags = ?, default_metadata = ?, default_loop_anchor = ?, updated_at = ?
 		WHERE id = ?
-	`, t.Name, descNull, t.Instructions, typeNull, t.DefaultPriority, tagsJSON, metaJSON, t.UpdatedAt, t.ID)
+	`, t.Name, descNull, t.Instructions, typeNull, t.DefaultPriority, tagsJSON, metaJSON, anchorNull, t.UpdatedAt, t.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update template: %w", err)
 	}

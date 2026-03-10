@@ -18,7 +18,7 @@ func TestV2ProjectAutomationReplaySuccess(t *testing.T) {
 		t.Fatalf("CreateProject failed: %v", err)
 	}
 
-	parentTask, err := CreateTaskV2WithMeta(testDB, "Finish report", project.ID, nil, nil, nil, nil, nil)
+	parentTask, err := CreateTaskV2WithMeta(testDB, "Finish report", project.ID, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTaskV2WithMeta failed: %v", err)
 	}

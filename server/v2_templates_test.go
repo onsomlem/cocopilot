@@ -66,7 +66,7 @@ func TestV2Templates_GetUpdateDelete(t *testing.T) {
 	defer cleanup()
 
 	proj, _ := CreateProject(db, "tmpl-test2", "", nil)
-	tmpl, err := CreateTaskTemplate(db, proj.ID, "Original", nil, "do stuff", nil, 50, nil, nil)
+	tmpl, err := CreateTaskTemplate(db, proj.ID, "Original", nil, "do stuff", nil, 50, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTaskTemplate: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestV2Templates_Instantiate(t *testing.T) {
 
 	proj, _ := CreateProject(db, "tmpl-inst", "", nil)
 	desc := "Template description"
-	tmpl, err := CreateTaskTemplate(db, proj.ID, "Deploy", &desc, "deploy to prod", nil, 90, []string{"deploy"}, nil)
+	tmpl, err := CreateTaskTemplate(db, proj.ID, "Deploy", &desc, "deploy to prod", nil, 90, []string{"deploy"}, nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTaskTemplate: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestV2Templates_InstantiateWithOverrides(t *testing.T) {
 	defer cleanup()
 
 	proj, _ := CreateProject(db, "tmpl-override", "", nil)
-	tmpl, _ := CreateTaskTemplate(db, proj.ID, "Base", nil, "base instructions", nil, 50, []string{"base"}, nil)
+	tmpl, _ := CreateTaskTemplate(db, proj.ID, "Base", nil, "base instructions", nil, 50, []string{"base"}, nil, nil)
 
 	instURL := "/api/v2/projects/" + proj.ID + "/templates/" + tmpl.ID + "/instantiate"
 	body := `{"title":"Custom Title","instructions":"custom instructions","priority":99,"tags":["custom"]}`
@@ -213,7 +213,7 @@ func TestV2Templates_WrongProjectTemplate(t *testing.T) {
 
 	proj1, _ := CreateProject(db, "proj1", "", nil)
 	proj2, _ := CreateProject(db, "proj2", "", nil)
-	tmpl, _ := CreateTaskTemplate(db, proj1.ID, "Proj1Tmpl", nil, "instr", nil, 50, nil, nil)
+	tmpl, _ := CreateTaskTemplate(db, proj1.ID, "Proj1Tmpl", nil, "instr", nil, 50, nil, nil, nil)
 
 	// Try to GET template from wrong project
 	detailURL := "/api/v2/projects/" + proj2.ID + "/templates/" + tmpl.ID

@@ -46,12 +46,13 @@ func GetTaskV2(db *sql.DB, taskID int) (*models.TaskV2, error) {
 	var updatedAt sql.NullString
 	var requiresApproval int
 	var approvalStatus sql.NullString
+	var loopAnchor sql.NullString
 
 	err := db.QueryRow(`
 		SELECT id, project_id, title, instructions, type, priority, tags_json,
 		       status, status_v2, parent_task_id, output, created_at, updated_at,
 		       COALESCE(automation_depth, 0),
-		       COALESCE(requires_approval, 0), approval_status
+		       COALESCE(requires_approval, 0), approval_status, loop_anchor_prompt
 		FROM tasks WHERE id = ?
 	`, taskID).Scan(
 		&task.ID,
@@ -70,6 +71,7 @@ func GetTaskV2(db *sql.DB, taskID int) (*models.TaskV2, error) {
 		&task.AutomationDepth,
 		&requiresApproval,
 		&approvalStatus,
+		&loopAnchor,
 	)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("task not found: %d", taskID)
@@ -88,6 +90,9 @@ func GetTaskV2(db *sql.DB, taskID int) (*models.TaskV2, error) {
 	task.RequiresApproval = requiresApproval != 0
 	if approvalStatus.Valid {
 		task.ApprovalStatus = &approvalStatus.String
+	}
+	if loopAnchor.Valid {
+		task.LoopAnchorPrompt = &loopAnchor.String
 	}
 
 	if title.Valid {
@@ -173,7 +178,7 @@ func CreateTaskV2(db *sql.DB, instructions string, projectID string, parentTaskI
 	return GetTaskV2(db, int(taskID))
 }
 
-func CreateTaskV2WithMeta(db *sql.DB, instructions string, projectID string, parentTaskID *int, title *string, taskType *models.TaskType, priority *int, tags []string) (*models.TaskV2, error) {
+func CreateTaskV2WithMeta(db *sql.DB, instructions string, projectID string, parentTaskID *int, title *string, taskType *models.TaskType, priority *int, tags []string, loopAnchorPrompt *string) (*models.TaskV2, error) {
 	createdAt := models.NowISO()
 	updatedAt := createdAt
 
@@ -205,12 +210,17 @@ func CreateTaskV2WithMeta(db *sql.DB, instructions string, projectID string, par
 		tagsNull = sql.NullString{String: tagsJSON, Valid: true}
 	}
 
+	var anchorNull sql.NullString
+	if loopAnchorPrompt != nil && strings.TrimSpace(*loopAnchorPrompt) != "" {
+		anchorNull = sql.NullString{String: *loopAnchorPrompt, Valid: true}
+	}
+
 	var result sql.Result
 	var err error
 	if parentTaskID != nil {
 		result, err = db.Exec(
-			`INSERT INTO tasks (instructions, status, status_v2, parent_task_id, project_id, created_at, updated_at, title, type, priority, tags_json)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO tasks (instructions, status, status_v2, parent_task_id, project_id, created_at, updated_at, title, type, priority, tags_json, loop_anchor_prompt)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			instructions,
 			models.StatusNotPicked,
 			models.TaskStatusQueued,
@@ -222,11 +232,12 @@ func CreateTaskV2WithMeta(db *sql.DB, instructions string, projectID string, par
 			typeNull,
 			resolvedPriority,
 			tagsNull,
+			anchorNull,
 		)
 	} else {
 		result, err = db.Exec(
-			`INSERT INTO tasks (instructions, status, status_v2, project_id, created_at, updated_at, title, type, priority, tags_json)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO tasks (instructions, status, status_v2, project_id, created_at, updated_at, title, type, priority, tags_json, loop_anchor_prompt)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			instructions,
 			models.StatusNotPicked,
 			models.TaskStatusQueued,
@@ -237,6 +248,7 @@ func CreateTaskV2WithMeta(db *sql.DB, instructions string, projectID string, par
 			typeNull,
 			resolvedPriority,
 			tagsNull,
+			anchorNull,
 		)
 	}
 	if err != nil {
@@ -409,7 +421,8 @@ func ListTasksV2(db *sql.DB, projectID string, statusColumn string, statusValue 
 	query := strings.Builder{}
 	query.WriteString(`
 		SELECT id, project_id, title, instructions, type, priority, tags_json,
-		       status, status_v2, parent_task_id, output, created_at, updated_at
+		       status, status_v2, parent_task_id, output, created_at, updated_at,
+		       loop_anchor_prompt
 		FROM tasks`)
 	if len(filters) > 0 {
 		query.WriteString(" WHERE ")
@@ -448,6 +461,7 @@ func ListTasksV2(db *sql.DB, projectID string, statusColumn string, statusValue 
 		var parentID sql.NullInt64
 		var output sql.NullString
 		var updatedAt sql.NullString
+		var loopAnchor sql.NullString
 
 		err := rows.Scan(
 			&task.ID,
@@ -463,6 +477,7 @@ func ListTasksV2(db *sql.DB, projectID string, statusColumn string, statusValue 
 			&output,
 			&task.CreatedAt,
 			&updatedAt,
+			&loopAnchor,
 		)
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to scan task: %w", err)
@@ -497,6 +512,9 @@ func ListTasksV2(db *sql.DB, projectID string, statusColumn string, statusValue 
 		if output.Valid {
 			outputStr := strings.ReplaceAll(output.String, "\\n", "\n")
 			task.Output = &outputStr
+		}
+		if loopAnchor.Valid {
+			task.LoopAnchorPrompt = &loopAnchor.String
 		}
 		if updatedAt.Valid && strings.TrimSpace(updatedAt.String) != "" {
 			task.UpdatedAt = &updatedAt.String
@@ -629,7 +647,7 @@ func GetTasksDependingOn(db *sql.DB, completedTaskID int) ([]models.TaskV2, erro
 	rows, err := db.Query(`
 		SELECT t.id, t.project_id, t.title, t.instructions, t.type, t.priority, t.tags_json,
 		       t.status, t.status_v2, t.parent_task_id, t.output, t.created_at, t.updated_at,
-		       COALESCE(t.automation_depth, 0)
+		       COALESCE(t.automation_depth, 0), t.loop_anchor_prompt
 		FROM tasks t
 		INNER JOIN task_dependencies td ON td.task_id = t.id
 		WHERE td.depends_on_task_id = ? AND t.deleted_at IS NULL
@@ -642,13 +660,14 @@ func GetTasksDependingOn(db *sql.DB, completedTaskID int) ([]models.TaskV2, erro
 	var tasks []models.TaskV2
 	for rows.Next() {
 		var task models.TaskV2
-		var title, taskType, tagsJSON, statusV2, output, updatedAt sql.NullString
+		var title, taskType, tagsJSON, statusV2, output, updatedAt, loopAnchor sql.NullString
 		var parentID sql.NullInt64
 		var statusV1 string
 		if err := rows.Scan(
 			&task.ID, &task.ProjectID, &title, &task.Instructions, &taskType,
 			&task.Priority, &tagsJSON, &statusV1, &statusV2, &parentID,
 			&output, &task.CreatedAt, &updatedAt, &task.AutomationDepth,
+			&loopAnchor,
 		); err != nil {
 			return nil, fmt.Errorf("GetTasksDependingOn: scan: %w", err)
 		}
@@ -679,6 +698,9 @@ func GetTasksDependingOn(db *sql.DB, completedTaskID int) ([]models.TaskV2, erro
 		if output.Valid {
 			s := strings.ReplaceAll(output.String, "\\n", "\n")
 			task.Output = &s
+		}
+		if loopAnchor.Valid {
+			task.LoopAnchorPrompt = &loopAnchor.String
 		}
 		if updatedAt.Valid && strings.TrimSpace(updatedAt.String) != "" {
 			task.UpdatedAt = &updatedAt.String

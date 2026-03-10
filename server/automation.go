@@ -751,7 +751,7 @@ func processAutomationEvent(db *sql.DB, event Event) {
                 }
             }
 
-            child, err := CreateTaskV2WithMeta(db, instructions, task.ProjectID, parentID, title, taskType, action.Task.Priority, tags)
+            child, err := CreateTaskV2WithMeta(db, instructions, task.ProjectID, parentID, title, taskType, action.Task.Priority, tags, nil)
             if err != nil {
                 log.Printf("Automation failed: create task for rule %q failed: %v", rule.Name, err)
                 if automationCircuit != nil {
@@ -975,7 +975,7 @@ func createAutomationEscalateTask(db *sql.DB, parentTask *TaskV2, reason string)
     tags := []string{"needs_human", "escalation", "auto"}
     parentID := parentTask.ID
 
-    child, err := CreateTaskV2WithMeta(db, instructions, parentTask.ProjectID, &parentID, &title, (*TaskType)(&taskType), nil, tags)
+    child, err := CreateTaskV2WithMeta(db, instructions, parentTask.ProjectID, &parentID, &title, (*TaskType)(&taskType), nil, tags, nil)
     if err != nil {
         log.Printf("Automation escalation: failed to create ESCALATE task: %v", err)
         return
@@ -999,7 +999,7 @@ func createAutomationReviewTask(db *sql.DB, parentTask *TaskV2, reason string) {
     tags := []string{"needs_human", "review", "auto"}
     parentID := parentTask.ID
 
-    child, err := CreateTaskV2WithMeta(db, instructions, parentTask.ProjectID, &parentID, &title, (*TaskType)(&taskType), nil, tags)
+    child, err := CreateTaskV2WithMeta(db, instructions, parentTask.ProjectID, &parentID, &title, (*TaskType)(&taskType), nil, tags, nil)
     if err != nil {
         log.Printf("Automation review: failed to create REVIEW task: %v", err)
         return
@@ -1107,7 +1107,7 @@ func processRunFailedEvent(db *sql.DB, event Event) {
     taskType := TaskTypeAnalyze
     tags := []string{"auto", "failure-analysis"}
 
-    child, err := CreateTaskV2WithMeta(db, instructions, task.ProjectID, &taskID, &title, &taskType, nil, tags)
+    child, err := CreateTaskV2WithMeta(db, instructions, task.ProjectID, &taskID, &title, &taskType, nil, tags, nil)
     if err != nil {
         log.Printf("run.failed worker: failed to create analysis task: %v", err)
         return
@@ -1328,7 +1328,7 @@ func processContextInvalidatedEvent(db *sql.DB, event Event) {
     taskType := TaskTypeAnalyze
     tags := []string{"auto", "context-refresh"}
 
-    child, err := CreateTaskV2WithMeta(db, instructions, event.ProjectID, nil, &title, &taskType, nil, tags)
+    child, err := CreateTaskV2WithMeta(db, instructions, event.ProjectID, nil, &title, &taskType, nil, tags, nil)
     if err != nil {
         log.Printf("context.invalidated worker: failed to create refresh task: %v", err)
         return

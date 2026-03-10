@@ -1648,6 +1648,7 @@ func v2ProjectTasksHandler(w http.ResponseWriter, r *http.Request) {
 		Tags             []string `json:"tags"`
 		DependsOn        []int   `json:"depends_on"`
 		TemplateID       *string `json:"template_id"`
+		LoopAnchorPrompt *string `json:"loop_anchor_prompt"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -1761,6 +1762,9 @@ func v2ProjectTasksHandler(w http.ResponseWriter, r *http.Request) {
 		if len(req.Tags) == 0 && len(tmpl.DefaultTags) > 0 {
 			req.Tags = tmpl.DefaultTags
 		}
+		if req.LoopAnchorPrompt == nil && tmpl.DefaultLoopAnchor != nil {
+			req.LoopAnchorPrompt = tmpl.DefaultLoopAnchor
+		}
 	}
 
 	// Map type string to TaskType
@@ -1770,7 +1774,7 @@ func v2ProjectTasksHandler(w http.ResponseWriter, r *http.Request) {
 		taskType = &tt
 	}
 
-	task, err := CreateTaskV2WithMeta(db, instructions, project.ID, req.ParentTaskID, req.Title, taskType, req.Priority, req.Tags)
+	task, err := CreateTaskV2WithMeta(db, instructions, project.ID, req.ParentTaskID, req.Title, taskType, req.Priority, req.Tags, req.LoopAnchorPrompt)
 	if err != nil {
 		writeV2Error(w, http.StatusInternalServerError, "INTERNAL", err.Error(), map[string]interface{}{
 			"project_id": project.ID,

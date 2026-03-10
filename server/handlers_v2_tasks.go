@@ -1876,7 +1876,7 @@ func v2TaskCompleteHandler(w http.ResponseWriter, r *http.Request, rawID string)
 
 	if len(nextTasks) > 0 {
 		for _, nextTask := range nextTasks {
-			child, err := CreateTaskV2WithMeta(db, nextTask.instructions, completedTask.ProjectID, &taskID, nextTask.title, nextTask.taskType, nextTask.priority, nextTask.tags)
+			child, err := CreateTaskV2WithMeta(db, nextTask.instructions, completedTask.ProjectID, &taskID, nextTask.title, nextTask.taskType, nextTask.priority, nextTask.tags, nil)
 			if err != nil {
 				writeV2Error(w, http.StatusInternalServerError, "INTERNAL", err.Error(), map[string]interface{}{
 					"task_id": taskID,

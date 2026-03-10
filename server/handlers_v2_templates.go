@@ -40,6 +40,7 @@ func v2ProjectTemplatesHandler(w http.ResponseWriter, r *http.Request) {
 			DefaultPriority *int                   `json:"default_priority"`
 			DefaultTags     []string               `json:"default_tags"`
 			DefaultMetadata map[string]interface{} `json:"default_metadata"`
+			DefaultLoopAnchor *string              `json:"default_loop_anchor"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeV2Error(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body", nil)
@@ -53,7 +54,7 @@ func v2ProjectTemplatesHandler(w http.ResponseWriter, r *http.Request) {
 		if req.DefaultPriority != nil {
 			priority = *req.DefaultPriority
 		}
-		tmpl, err := CreateTaskTemplate(db, projectID, req.Name, req.Description, req.Instructions, req.DefaultType, priority, req.DefaultTags, req.DefaultMetadata)
+		tmpl, err := CreateTaskTemplate(db, projectID, req.Name, req.Description, req.Instructions, req.DefaultType, priority, req.DefaultTags, req.DefaultMetadata, req.DefaultLoopAnchor)
 		if err != nil {
 			writeV2Error(w, http.StatusInternalServerError, "INTERNAL", err.Error(), nil)
 			return
@@ -94,19 +95,20 @@ func v2ProjectTemplateDetailHandler(w http.ResponseWriter, r *http.Request) {
 		writeV2JSON(w, http.StatusOK, map[string]interface{}{"template": tmpl})
 	case http.MethodPut:
 		var req struct {
-			Name            *string                `json:"name"`
-			Description     *string                `json:"description"`
-			Instructions    *string                `json:"instructions"`
-			DefaultType     *string                `json:"default_type"`
-			DefaultPriority *int                   `json:"default_priority"`
-			DefaultTags     []string               `json:"default_tags"`
-			DefaultMetadata map[string]interface{} `json:"default_metadata"`
+			Name              *string                `json:"name"`
+			Description       *string                `json:"description"`
+			Instructions      *string                `json:"instructions"`
+			DefaultType       *string                `json:"default_type"`
+			DefaultPriority   *int                   `json:"default_priority"`
+			DefaultTags       []string               `json:"default_tags"`
+			DefaultMetadata   map[string]interface{} `json:"default_metadata"`
+			DefaultLoopAnchor *string                `json:"default_loop_anchor"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeV2Error(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body", nil)
 			return
 		}
-		tmpl, err := UpdateTaskTemplate(db, templateID, req.Name, req.Description, req.Instructions, req.DefaultType, req.DefaultPriority, req.DefaultTags, req.DefaultMetadata)
+		tmpl, err := UpdateTaskTemplate(db, templateID, req.Name, req.Description, req.Instructions, req.DefaultType, req.DefaultPriority, req.DefaultTags, req.DefaultMetadata, req.DefaultLoopAnchor)
 		if err != nil {
 			writeV2Error(w, http.StatusNotFound, "NOT_FOUND", err.Error(), nil)
 			return
@@ -174,7 +176,7 @@ func v2TemplateInstantiateHandler(w http.ResponseWriter, r *http.Request, projec
 		taskType = &tt
 	}
 
-	task, err := CreateTaskV2WithMeta(db, instructions, projectID, nil, title, taskType, priority, tags)
+	task, err := CreateTaskV2WithMeta(db, instructions, projectID, nil, title, taskType, priority, tags, tmpl.DefaultLoopAnchor)
 	if err != nil {
 		writeV2Error(w, http.StatusInternalServerError, "INTERNAL", err.Error(), nil)
 		return

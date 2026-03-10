@@ -160,7 +160,7 @@ func v2ProjectImportHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		newTask, err := CreateTaskV2WithMeta(db, task.Instructions, newProjectID, parentID,
-			task.Title, &task.Type, &task.Priority, task.Tags)
+			task.Title, &task.Type, &task.Priority, task.Tags, nil)
 		if err != nil {
 			continue
 		}

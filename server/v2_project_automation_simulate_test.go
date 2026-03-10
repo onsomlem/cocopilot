@@ -22,7 +22,7 @@ func TestV2ProjectAutomationSimulateSuccess(t *testing.T) {
 	parentType := TaskTypeAnalyze
 	parentPriority := 7
 	parentTags := []string{"parent"}
-	parentTask, err := CreateTaskV2WithMeta(testDB, "Finish report", project.ID, nil, &title, &parentType, &parentPriority, parentTags)
+	parentTask, err := CreateTaskV2WithMeta(testDB, "Finish report", project.ID, nil, &title, &parentType, &parentPriority, parentTags, nil)
 	if err != nil {
 		t.Fatalf("CreateTaskV2WithMeta failed: %v", err)
 	}

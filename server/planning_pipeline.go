@@ -702,7 +702,7 @@ func createApprovedTasks(db *sql.DB, projectID string, synthOutput, driftOutput 
 			}
 		}
 
-		newTask, err := CreateTaskV2WithMeta(db, instructions, projectID, nil, &title, &taskType, &priority, tags)
+		newTask, err := CreateTaskV2WithMeta(db, instructions, projectID, nil, &title, &taskType, &priority, tags, nil)
 		if err != nil {
 			log.Printf("planning: failed to create task '%s': %v", title, err)
 			continue

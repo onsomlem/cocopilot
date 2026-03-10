@@ -395,7 +395,7 @@ func v2SeedDemoHandler(w http.ResponseWriter, r *http.Request) {
 
 	var created []int
 	for _, d := range demos {
-		t, terr := CreateTaskV2WithMeta(db, d.instr, projID, nil, title(d.title), typ(d.ttype), prio(d.prio), d.tags)
+		t, terr := CreateTaskV2WithMeta(db, d.instr, projID, nil, title(d.title), typ(d.ttype), prio(d.prio), d.tags, nil)
 		if terr != nil {
 			writeV2Error(w, http.StatusInternalServerError, "SEED_FAILED", terr.Error(), nil)
 			return

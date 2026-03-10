@@ -287,6 +287,11 @@ func workerClaimNext(client *http.Client, baseURL, projectID, apiKey string) (cl
 		Instructions: toString(task["instructions"]),
 	}
 
+	// Prepend loop-anchor prompt to instructions so the executor stays on track.
+	if anchor := toString(task["loop_anchor_prompt"]); anchor != "" {
+		cr.Instructions = "[LOOP ANCHOR]\n" + anchor + "\n\n[TASK INSTRUCTIONS]\n" + cr.Instructions
+	}
+
 	// Extract run ID
 	if run, ok := result["run"].(map[string]interface{}); ok {
 		cr.RunID = toString(run["id"])

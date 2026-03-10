@@ -104,7 +104,11 @@ type TaskV2 struct {
 	AutomationDepth  int          `json:"automation_depth"`
 	RequiresApproval bool         `json:"requires_approval,omitempty"`
 	ApprovalStatus   *string      `json:"approval_status,omitempty"`
+	LoopAnchorPrompt *string      `json:"loop_anchor_prompt,omitempty"`
 }
+
+// DefaultLoopAnchorPrompt is the system-wide default execution anchor prompt.
+const DefaultLoopAnchorPrompt = "Stay focused on this task's actual objective. Continue the current line of work until you have made meaningful progress, completed the task, or hit a real blocker. Before stopping, check what remains, avoid drifting into unrelated work, and note the next logical step if anything is still unfinished."
 
 // TaskDependency represents a dependency between two tasks.
 type TaskDependency struct {
@@ -294,17 +298,18 @@ type RunSummary struct {
 
 // TaskTemplate represents a reusable task definition for a project.
 type TaskTemplate struct {
-	ID              string                 `json:"id"`
-	ProjectID       string                 `json:"project_id"`
-	Name            string                 `json:"name"`
-	Description     *string                `json:"description,omitempty"`
-	Instructions    string                 `json:"instructions"`
-	DefaultType     *string                `json:"default_type,omitempty"`
-	DefaultPriority int                    `json:"default_priority"`
-	DefaultTags     []string               `json:"default_tags,omitempty"`
-	DefaultMetadata map[string]interface{} `json:"default_metadata,omitempty"`
-	CreatedAt       string                 `json:"created_at"`
-	UpdatedAt       string                 `json:"updated_at"`
+	ID                string                 `json:"id"`
+	ProjectID         string                 `json:"project_id"`
+	Name              string                 `json:"name"`
+	Description       *string                `json:"description,omitempty"`
+	Instructions      string                 `json:"instructions"`
+	DefaultType       *string                `json:"default_type,omitempty"`
+	DefaultPriority   int                    `json:"default_priority"`
+	DefaultTags       []string               `json:"default_tags,omitempty"`
+	DefaultMetadata   map[string]interface{} `json:"default_metadata,omitempty"`
+	DefaultLoopAnchor *string                `json:"default_loop_anchor,omitempty"`
+	CreatedAt         string                 `json:"created_at"`
+	UpdatedAt         string                 `json:"updated_at"`
 }
 
 // ApprovalStatus constants for human-in-the-loop.
