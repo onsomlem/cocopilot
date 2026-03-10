@@ -116,12 +116,12 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString(`const tasks=Array.isArray(tasksData.tasks)?tasksData.tasks:[];const agents=Array.isArray(agentsData.agents)?agentsData.agents:[];`)
 	b.WriteString(`document.getElementById('seed-banner').style.display=tasks.length===0?'':'none';`)
 	// Stats (clickable)
-	b.WriteString(`const todo=tasks.filter(t=>t.status==='TODO'||t.status==='PENDING').length;`)
-	b.WriteString(`const inProg=tasks.filter(t=>t.status==='IN_PROGRESS').length;`)
-	b.WriteString(`const done=tasks.filter(t=>t.status==='DONE'||t.status==='COMPLETED').length;`)
-	b.WriteString(`const failed=tasks.filter(t=>t.status==='FAILED').length;`)
+	b.WriteString(`const todo=tasks.filter(t=>cocoStatus.isClaimable(t.status_v2||t.status)).length;`)
+	b.WriteString(`const inProg=tasks.filter(t=>{const s=(t.status_v2||t.status||'').toUpperCase();return s==='IN_PROGRESS'||s==='RUNNING'||s==='CLAIMED';}).length;`)
+	b.WriteString(`const done=tasks.filter(t=>cocoStatus.isDone(t.status_v2||t.status)&&(t.status_v2||t.status||'').toUpperCase()!=='FAILED').length;`)
+	b.WriteString(`const failed=tasks.filter(t=>(t.status_v2||t.status||'').toUpperCase()==='FAILED').length;`)
 	b.WriteString(`const blocked=tasks.filter(t=>t.is_blocked).length;`)
-	b.WriteString(`const onlineAgents=agents.filter(a=>a.status==='ONLINE'||a.status==='active').length;`)
+	b.WriteString(`const onlineAgents=agents.filter(a=>{const s=cocoStatus.agentLabel(a.status);return s==='ONLINE';}).length;`)
 	b.WriteString(`document.getElementById('dash-stats').innerHTML=`)
 	b.WriteString(`'<div class="dash-card info" onclick="location.href=\\'/board\\'"><div class="dc-label">Queued</div><div class="dc-value">'+todo+'</div><div class="dc-action">Open queue</div></div>'`)
 	b.WriteString(`+'<div class="dash-card warn" onclick="location.href=\\'/board\\'"><div class="dc-label">In Progress</div><div class="dc-value">'+inProg+'</div><div class="dc-action">View active</div></div>'`)
@@ -172,7 +172,11 @@ func subPageHead(title string) string {
 	return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">` +
 		`<meta name="viewport" content="width=device-width, initial-scale=1.0">` +
 		`<title>` + html.EscapeString(title) + ` - Cocopilot</title>` +
-		`<style>` + uiSharedCSS() +
+		`<link rel="stylesheet" href="/static/css/app.css">` +
+		`<script src="/static/js/coco.js"></script>` +
+		`<style>` +
+		// Inline shared CSS as fallback (embedded FS guarantees availability)
+		uiSharedCSS() +
 		// Legacy compat styles
 		`.meta{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:14px;font-size:12px;color:#b0b0b0;}` +
 		`.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px;}` +
@@ -679,7 +683,6 @@ func memoryPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("</style>")
 	b.WriteString("<div class=\"card\">")
 	b.WriteString("<h1>Memory</h1>")
-	b.WriteString("<div class=\"row\" style=\"margin-bottom:10px;\"><label class=\"field\">Project<input class=\"input\" id=\"memory-project\" value=\"proj_default\" style=\"width:200px;\"></label></div>")
 	b.WriteString("<p>Stored key-value pairs for the selected project</p>")
 	b.WriteString("<div class=\"meta\"><span id=\"memory-status\">Loading...</span>")
 	b.WriteString("<button class=\"btn\" id=\"memory-refresh\" type=\"button\">Refresh</button></div>")
@@ -703,8 +706,8 @@ func memoryPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("const keyEl=document.getElementById('memory-key');")
 	b.WriteString("const valueEl=document.getElementById('memory-value');")
 	b.WriteString("const formStatusEl=document.getElementById('memory-form-status');")
-	b.WriteString("const projectEl=document.getElementById('memory-project');")
-	b.WriteString("function getProjectID(){return String(projectEl.value||'proj_default').trim();}")
+	b.WriteString("function getProjectID(){return cocoProject.get();}")
+	b.WriteString("window.addEventListener('coco:project-changed',loadMemory);")
 	b.WriteString("async function loadMemory(){const pid=getProjectID();statusEl.textContent='Loading...';")
 	b.WriteString("bodyEl.innerHTML='<tr><td colspan=\"3\">Loading...</td></tr>';try{")
 	b.WriteString("const res=await fetch('/api/v2/projects/'+encodeURIComponent(pid)+'/memory?limit=50');")
@@ -862,7 +865,7 @@ func auditPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("<option value=\"audit.task.deleted\">Task Deleted</option>")
 	b.WriteString("<option value=\"audit.workdir.changed\">Workdir Changed</option>")
 	b.WriteString("</select></label>")
-	b.WriteString("<label>Project ID<input class=\"input\" id=\"audit-project\" placeholder=\"all projects\"></label>")
+	b.WriteString("<label>Project<select class=\"select\" id=\"audit-project\"><option value=\"\">All projects</option></select></label>")
 	b.WriteString("<button class=\"btn\" id=\"audit-refresh\" type=\"button\">Refresh</button>")
 	b.WriteString("</div>")
 	b.WriteString("<div class=\"meta\"><span id=\"audit-status\">Loading...</span></div>")

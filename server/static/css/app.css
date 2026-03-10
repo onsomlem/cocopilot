@@ -1,0 +1,231 @@
+/* app.css — Cocopilot shared styles. Single source of truth for all UI pages. */
+
+:root {
+  --bg: #1e1e1e;
+  --surface: #252526;
+  --input-bg: #3c3c3c;
+  --border: #3c3c3c;
+  --text: #cccccc;
+  --text-muted: #858585;
+  --accent: #0078d4;
+  --accent-hover: #1c8ae8;
+  --success: #89d185;
+  --warning: #cca700;
+  --info: #3794ff;
+  --error: #f48771;
+  --dropdown-bg: #313131;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+
+/* ── Navigation ───────────────────────────────────────────────────── */
+.top-nav {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 20px;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.top-nav .nav-icon { color: var(--accent); }
+.top-nav .nav-title {
+  font-size: 14px; font-weight: 600; color: var(--text); text-decoration: none;
+}
+.top-nav .nav-title:hover { color: #fff; }
+.top-nav nav { display: flex; align-items: center; gap: 4px; font-size: 12px; }
+.top-nav nav a {
+  color: var(--text-muted); text-decoration: none;
+  padding: 4px 8px; border-radius: 4px; transition: all .15s; white-space: nowrap;
+}
+.top-nav nav a:hover, .top-nav nav a.active { color: var(--text); background: var(--input-bg); }
+.nav-sep { color: var(--border); font-size: 14px; user-select: none; margin: 0 2px; }
+
+/* More dropdown */
+.nav-more { position: relative; display: inline-block; }
+.nav-more-btn {
+  color: var(--text-muted); background: none; border: 1px solid transparent;
+  padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all .15s;
+}
+.nav-more-btn:hover { color: var(--text); background: var(--input-bg); }
+.nav-dropdown {
+  display: none; position: absolute; top: 100%; right: 0;
+  background: var(--dropdown-bg); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 0; min-width: 160px; z-index: 100;
+  box-shadow: 0 4px 12px rgba(0,0,0,.4);
+}
+.nav-more:hover .nav-dropdown { display: block; }
+.nav-dropdown a {
+  display: block; padding: 6px 14px;
+  color: var(--text-muted); text-decoration: none; font-size: 12px; transition: all .1s;
+}
+.nav-dropdown a:hover { color: var(--text); background: var(--input-bg); }
+
+/* Project context (shell-level) */
+.nav-project {
+  margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 12px;
+}
+.nav-project select {
+  background: var(--input-bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 4px; padding: 3px 6px; font-size: 11px; cursor: pointer;
+}
+.nav-project select:focus { border-color: var(--accent); outline: none; }
+
+/* ── Page body ────────────────────────────────────────────────────── */
+.page-body { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 20px; margin-bottom: 16px;
+}
+h1 { font-size: 20px; margin: 0 0 6px; color: #e0e0e0; }
+h2 { font-size: 15px; margin: 18px 0 8px; color: #e0e0e0; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+p { margin: 0 0 14px; color: var(--text-muted); font-size: 13px; }
+.muted { color: var(--text-muted); }
+
+/* ── Toolbar ──────────────────────────────────────────────────────── */
+.toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  margin-bottom: 14px; font-size: 12px;
+}
+.toolbar .spacer { flex: 1; }
+
+/* ── Buttons ──────────────────────────────────────────────────────── */
+.btn {
+  background: var(--input-bg); border: 1px solid #505050; color: var(--text);
+  padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all .15s;
+}
+.btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn:disabled { opacity: .5; cursor: default; pointer-events: none; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-danger { background: #5a1d1d; border-color: #6e2c2c; color: #f48771; }
+.btn-danger:hover { background: #6e2c2c; }
+
+/* ── Inputs ───────────────────────────────────────────────────────── */
+.input, .textarea, .select {
+  background: var(--input-bg); border: 1px solid #505050; color: var(--text);
+  border-radius: 4px; padding: 6px 8px; font-size: 12px;
+}
+.input:focus, .textarea:focus, .select:focus { border-color: var(--accent); outline: none; }
+.textarea { min-height: 100px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.field { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #b0b0b0; }
+.field-stack { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #b0b0b0; }
+.field-stack label {
+  font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .03em;
+}
+
+/* ── Tables ───────────────────────────────────────────────────────── */
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th, td { padding: 8px; border-bottom: 1px solid var(--border); text-align: left; }
+th {
+  color: var(--accent); font-weight: 600; font-size: 11px;
+  text-transform: uppercase; letter-spacing: .05em;
+}
+tbody tr:hover { background: #2a2d2e; }
+tbody tr { cursor: pointer; }
+
+/* ── Stat cards ───────────────────────────────────────────────────── */
+.stat-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px; margin-bottom: 14px;
+}
+.stat {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px; text-align: center;
+}
+.stat .label {
+  font-size: 11px; color: var(--text-muted); text-transform: uppercase;
+  letter-spacing: .05em; margin-bottom: 4px;
+}
+.stat .value { font-size: 22px; font-weight: 700; color: var(--text); }
+.stat.ok .value { color: var(--success); }
+.stat.warn .value { color: var(--warning); }
+.stat.error .value { color: var(--error); }
+.stat.info .value { color: var(--info); }
+.stat.clickable { cursor: pointer; transition: border-color .15s; }
+.stat.clickable:hover { border-color: var(--accent); }
+
+/* ── List/detail layout ───────────────────────────────────────────── */
+.list-detail {
+  display: grid; grid-template-columns: 1fr 380px; gap: 16px; min-height: 400px;
+}
+.list-detail.no-detail { grid-template-columns: 1fr; }
+.detail-pane {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 16px; overflow-y: auto;
+  max-height: calc(100vh - 140px); position: sticky; top: 80px;
+}
+.detail-pane h3 {
+  font-size: 14px; color: #e0e0e0; margin: 0 0 12px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.detail-pane .close-btn {
+  background: none; border: none; color: var(--text-muted);
+  cursor: pointer; font-size: 16px; padding: 2px 6px; border-radius: 4px;
+}
+.detail-pane .close-btn:hover { background: var(--input-bg); color: var(--text); }
+.detail-section { margin-bottom: 14px; }
+.detail-section .ds-label {
+  font-size: 11px; color: var(--text-muted); text-transform: uppercase;
+  letter-spacing: .03em; margin-bottom: 4px;
+}
+.detail-section .ds-value { font-size: 12px; color: var(--text); }
+.detail-section .ds-value a { color: var(--accent); text-decoration: none; }
+.detail-section .ds-value a:hover { text-decoration: underline; }
+
+/* ── Empty/loading/error states ───────────────────────────────────── */
+.state-empty { text-align: center; padding: 32px 20px; color: var(--text-muted); }
+.state-empty .state-icon { font-size: 28px; margin-bottom: 8px; opacity: .5; }
+.state-empty .state-msg { font-size: 13px; margin-bottom: 8px; }
+.state-empty .state-hint { font-size: 11px; color: #666; }
+.state-empty .state-action { margin-top: 12px; }
+.state-loading { text-align: center; padding: 32px; color: var(--text-muted); font-size: 12px; }
+.state-error { text-align: center; padding: 20px; color: var(--error); font-size: 12px; }
+
+/* ── Badges ───────────────────────────────────────────────────────── */
+.badge {
+  display: inline-block; padding: 2px 8px; border-radius: 999px;
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
+}
+.badge-ok { background: #1a3a1a; color: var(--success); border: 1px solid #2d5a2d; }
+.badge-warn { background: #3a3519; color: var(--warning); border: 1px solid #5a5325; }
+.badge-error { background: #3a1919; color: var(--error); border: 1px solid #5a2525; }
+.badge-info { background: #19293a; color: var(--info); border: 1px solid #254a6e; }
+.badge-muted { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
+
+/* ── Entity links ─────────────────────────────────────────────────── */
+.entity-link {
+  display: inline-flex; align-items: center; gap: 4px;
+  color: var(--accent); text-decoration: none; font-size: 12px;
+  padding: 2px 6px; border-radius: 4px; transition: background .1s;
+}
+.entity-link:hover { background: #1e3a5f; text-decoration: none; }
+
+/* ── Toast ────────────────────────────────────────────────────────── */
+#page-toast {
+  position: fixed; bottom: 20px; right: 20px; z-index: 9999;
+  display: none; padding: 10px 16px; border-radius: 6px; font-size: 12px;
+  color: var(--text); background: var(--bg); border: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+/* ── Footer ───────────────────────────────────────────────────────── */
+.footer {
+  background: var(--surface); border-top: 1px solid var(--border);
+  padding: 10px 20px; text-align: center; font-size: 12px; color: var(--text-muted);
+  margin-top: 32px;
+}
+.footer a { color: var(--accent); text-decoration: none; }
+.footer a:hover { text-decoration: underline; }
+
+/* ── Legacy compat ────────────────────────────────────────────────── */
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 14px; font-size: 12px; color: #b0b0b0; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.pill { background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; font-size: 12px; }

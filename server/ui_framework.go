@@ -173,6 +173,7 @@ func pageNav() string {
 		`</div>` +
 		`</div>` +
 		`</nav>` +
+		`<div class="nav-project"><span style="color:var(--text-muted);font-size:11px;">Project:</span><select><option>proj_default</option></select></div>` +
 		`</div>`
 }
 
@@ -184,6 +185,8 @@ func pageShell(title string, extraCSS string, extraHeadJS string, body string) s
 	b.WriteString(`<title>`)
 	b.WriteString(html.EscapeString(title))
 	b.WriteString(` - Cocopilot</title>`)
+	b.WriteString(`<link rel="stylesheet" href="/static/css/app.css">`)
+	b.WriteString(`<script src="/static/js/coco.js"></script>`)
 	b.WriteString(`<style>`)
 	b.WriteString(uiSharedCSS())
 	if extraCSS != "" {

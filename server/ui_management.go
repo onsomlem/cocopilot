@@ -176,7 +176,6 @@ func policiesHandler(w http.ResponseWriter, r *http.Request) {
 <h1>Policies</h1>
 <p>Manage enforcement policies for your projects.</p>
 <div class="meta">
-<label class="field">Project<input class="input" id="pol-project" value="proj_default" style="width:200px;"></label>
 <span id="pol-status">Loading...</span>
 <button class="btn btn-primary" id="btn-create-pol" type="button">+ New Policy</button>
 <button class="btn" id="pol-refresh" type="button">Refresh</button>
@@ -206,7 +205,8 @@ func policiesHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString(`<script>`)
 	b.WriteString(`const listEl=document.getElementById('pol-list');`)
 	b.WriteString(`const statusEl=document.getElementById('pol-status');`)
-	b.WriteString(`const projectEl=document.getElementById('pol-project');`)
+	b.WriteString(`function pid(){return cocoProject.get();}`)
+	b.WriteString(`window.addEventListener('coco:project-changed',loadPolicies);`)
 	b.WriteString(`const modal=document.getElementById('pol-modal');`)
 	b.WriteString(`const form=document.getElementById('pol-form');`)
 	b.WriteString(`const editIdEl=document.getElementById('pol-edit-id');`)
@@ -218,7 +218,6 @@ func policiesHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString(`const rulesContainer=document.getElementById('rules-container');`)
 	b.WriteString(`const ruleTypes=['automation.block','completion.block','task.create.block','task.update.block','task.delete.block'];`)
 	b.WriteString(`const esc=(v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));`)
-	b.WriteString(`function pid(){return String(projectEl.value||'proj_default').trim();}`)
 
 	b.WriteString(`function addRuleRow(type,reason){const row=document.createElement('div');row.className='rule-row';`)
 	b.WriteString(`row.innerHTML='<select class="select rule-type">'+ruleTypes.map(t=>'<option value="'+t+'"'+(t===type?' selected':'')+'>'+t+'</option>').join('')+'</select>'`)
@@ -311,7 +310,6 @@ func settingsHandler(w http.ResponseWriter, r *http.Request) {
 <h2>Automation Rules</h2>
 <p class="muted">Active automation rules (configured via COCO_AUTOMATION_RULES env var).</p>
 <div class="meta">
-<label class="field">Project<input class="input" id="auto-project" value="proj_default" style="width:200px;"></label>
 <button class="btn" id="auto-refresh" type="button">Refresh</button>
 <span id="auto-status"></span>
 </div>
@@ -339,8 +337,8 @@ func settingsHandler(w http.ResponseWriter, r *http.Request) {
 
 	b.WriteString(`<script>`)
 	b.WriteString(`const esc=(v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));`)
-	b.WriteString(`const projectEl=document.getElementById('auto-project');`)
-	b.WriteString(`function pid(){return String(projectEl.value||'proj_default').trim();}`)
+	b.WriteString(`function pid(){return cocoProject.get();}`)
+	b.WriteString(`window.addEventListener('coco:project-changed',function(){loadRules();});`)
 
 	// Load server config
 	b.WriteString(`async function loadConfig(){const body=document.getElementById('config-body');body.innerHTML='<tr><td colspan="2">Loading...</td></tr>';try{`)
