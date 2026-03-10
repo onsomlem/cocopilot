@@ -686,4 +686,222 @@ func TestIntegration_FirstRunLifecycle(t *testing.T) {
 	}
 }
 
+// TestIntegration_CanonicalProductFlow is the release-blocking lifecycle test.
+// It proves the complete public experience end-to-end:
+// project → agent register → create task → claim → run step → heartbeat lease →
+// complete task → verify task/runs/agents/events consistency.
+func TestIntegration_CanonicalProductFlow(t *testing.T) {
+	testDB, cleanup := setupLifecycleTestDB(t)
+	defer cleanup()
+
+	mux := http.NewServeMux()
+	registerRoutes(mux, runtimeConfig{})
+
+	// 1. Create/open project
+	project, err := CreateProject(testDB, "canonical-flow", "/tmp/canonical", nil)
+	if err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+
+	// 2. Register agent
+	agentBody := `{"name":"canonical-agent","capabilities":["go"],"metadata":{"version":"1.0"}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/agents", strings.NewReader(agentBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("Register agent: expected 201, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var agentResp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&agentResp)
+	agentID := agentResp["agent"].(map[string]interface{})["id"].(string)
+
+	// 3. Create task
+	taskBody := fmt.Sprintf(`{
+		"instructions":"Canonical test: build and verify",
+		"project_id":"%s",
+		"title":"Canonical product flow",
+		"type":"MODIFY",
+		"priority":80,
+		"tags":["release-blocking","e2e"]
+	}`, project.ID)
+	req = httptest.NewRequest(http.MethodPost, "/api/v2/tasks", strings.NewReader(taskBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("Create task: expected 201, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var taskResp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&taskResp)
+	taskID := int(taskResp["task"].(map[string]interface{})["id"].(float64))
+
+	// 4. Claim task — creates run and lease
+	claimBody := fmt.Sprintf(`{"agent_id":"%s","mode":"exclusive"}`, agentID)
+	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v2/tasks/%d/claim", taskID), strings.NewReader(claimBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("Claim: expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var claimResp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&claimResp)
+
+	// Verify claim response structure
+	if claimResp["task"] == nil {
+		t.Fatal("claim response missing 'task'")
+	}
+	if claimResp["run"] == nil {
+		t.Fatal("claim response missing 'run'")
+	}
+	if claimResp["lease"] == nil {
+		t.Fatal("claim response missing 'lease'")
+	}
+
+	runID := claimResp["run"].(map[string]interface{})["id"].(string)
+	leaseID := claimResp["lease"].(map[string]interface{})["id"].(string)
+
+	// Verify task moved to IN_PROGRESS
+	task, err := GetTaskV2(testDB, taskID)
+	if err != nil {
+		t.Fatalf("GetTaskV2: %v", err)
+	}
+	if task.StatusV2 != TaskStatusClaimed {
+		t.Errorf("after claim: expected CLAIMED, got %s", task.StatusV2)
+	}
+
+	// 5. Log a run step
+	stepBody := `{"name":"build","status":"SUCCEEDED","details":{"output":"compiled ok"}}`
+	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v2/runs/%s/steps", runID), strings.NewReader(stepBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code >= 400 {
+		t.Fatalf("Run step: expected success, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// 6. Heartbeat the lease
+	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v2/leases/%s/heartbeat", leaseID), nil)
+	req.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code >= 400 {
+		t.Fatalf("Lease heartbeat: expected success, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// 7. Complete task
+	completeBody := `{"output":"Built and verified successfully","result":{"summary":"canonical flow complete","changes_made":["widget.go"],"files_touched":["widget.go"]}}`
+	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v2/tasks/%d/complete", taskID), strings.NewReader(completeBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("Complete: expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// === VERIFY CONSISTENCY ===
+
+	// Task is SUCCEEDED
+	task, err = GetTaskV2(testDB, taskID)
+	if err != nil {
+		t.Fatalf("GetTaskV2 final: %v", err)
+	}
+	if task.StatusV2 != TaskStatusSucceeded {
+		t.Errorf("task: expected SUCCEEDED, got %s", task.StatusV2)
+	}
+
+	// Run is SUCCEEDED
+	run, err := GetLatestRunByTaskID(testDB, taskID)
+	if err != nil {
+		t.Fatalf("GetLatestRunByTaskID: %v", err)
+	}
+	if run == nil {
+		t.Fatal("expected run to exist")
+	}
+	if run.Status != RunStatusSucceeded {
+		t.Errorf("run: expected SUCCEEDED, got %s", run.Status)
+	}
+
+	// Lease is released (no active lease)
+	lease, err := GetLeaseByTaskID(testDB, taskID)
+	if err != nil {
+		t.Fatalf("GetLeaseByTaskID: %v", err)
+	}
+	if lease != nil {
+		t.Error("expected no active lease after completion")
+	}
+
+	// Agent still registered and accessible
+	req = httptest.NewRequest(http.MethodGet, "/api/v2/agents/"+agentID, nil)
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("agent detail: expected 200, got %d", rr.Code)
+	}
+
+	// Events reflect the full lifecycle
+	events, err := GetEventsByProjectID(testDB, project.ID, 100)
+	if err != nil {
+		t.Fatalf("GetEventsByProjectID: %v", err)
+	}
+	kinds := make(map[string]bool)
+	for _, ev := range events {
+		kinds[ev.Kind] = true
+	}
+	for _, expected := range []string{"task.claimed", "task.completed"} {
+		if !kinds[expected] {
+			t.Errorf("expected event kind %q not found", expected)
+		}
+	}
+
+	// Runs list includes our run
+	req = httptest.NewRequest(http.MethodGet, "/api/v2/runs", nil)
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("runs list: expected 200, got %d", rr.Code)
+	}
+
+	// Tasks list includes our task
+	req = httptest.NewRequest(http.MethodGet, "/api/v2/tasks", nil)
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("tasks list: expected 200, got %d", rr.Code)
+	}
+	var finalListResp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&finalListResp)
+	finalTasks := finalListResp["tasks"].([]interface{})
+	found := false
+	for _, ft := range finalTasks {
+		ftMap := ft.(map[string]interface{})
+		if int(ftMap["id"].(float64)) == taskID {
+			// Status may be under "status", "status_v2", or "status_v1"
+			statusVal := ""
+			if s, ok := ftMap["status_v2"].(string); ok {
+				statusVal = s
+			} else if s, ok := ftMap["status"].(string); ok {
+				statusVal = s
+			}
+			if statusVal != "SUCCEEDED" {
+				t.Errorf("task in list: expected SUCCEEDED, got %s", statusVal)
+			}
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("completed task not found in tasks list")
+	}
+
+	// Events list reflects consistent state
+	req = httptest.NewRequest(http.MethodGet, "/api/v2/events", nil)
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("events list: expected 200, got %d", rr.Code)
+	}
+}
+
 

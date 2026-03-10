@@ -1,14 +1,13 @@
 # Cocopilot — Full Setup Guide
 
-Complete start-to-finish guide for setting up Cocopilot in a new project.
+Complete start-to-finish guide for setting up Cocopilot as your local agent orchestration console.
 
 ---
 
 ## Prerequisites
 
 - **Go 1.21+** — [https://go.dev/dl/](https://go.dev/dl/)
-- **Node.js 18+** — required for MCP server and VS Code extension
-- **VS Code** — for MCP and VSIX integration
+- **Node.js 18+** — required only for MCP server and VS Code extension (optional)
 
 ---
 
@@ -30,84 +29,59 @@ cd cocopilot
 make build
 ```
 
-### Option C: Download binary
-
-```bash
-curl -L -o cocopilot https://github.com/onsomlem/cocopilot/releases/latest/download/cocopilot-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)
-chmod +x cocopilot
-```
-
 ---
 
-## Step 2: Start the Server
+## Step 2: Launch and Explore the Dashboard
 
 ```bash
 ./cocopilot
 ```
 
-- Server starts on `http://127.0.0.1:8080`
+- Your browser opens to `http://127.0.0.1:8080`
 - SQLite database auto-creates at `./tasks.db`
-- All 27 migrations apply automatically on first run
-- Kanban UI opens in your browser
+- All migrations apply automatically on first run
+- A default project (`proj_default`) is created
 
-### Optional: Custom configuration
+### What you see
+
+The **dashboard** is your control center:
+
+- **Board** — Kanban-style task columns (Pending → In Progress → Completed / Failed)
+- **Agents** — registered agents, heartbeat status, active runs
+- **Events** — real-time feed powered by SSE
+- **Project switcher** — manage multiple project workspaces
+
+### Seed demo data
+
+Click **Seed Demo** to populate sample tasks, agents, and runs. This is the fastest way to see all UI features in action.
+
+### Configuration options
 
 ```bash
-# Custom port
-COCO_HTTP_ADDR=:9090 ./cocopilot
-
-# Custom database path
-COCO_DB_PATH=./myproject.db ./cocopilot
-
-# Suppress browser auto-open
-COCO_NO_BROWSER=true ./cocopilot
-
-# Enable API key authentication
-COCO_REQUIRE_API_KEY=true COCO_API_KEY=$(openssl rand -hex 32) ./cocopilot
+COCO_HTTP_ADDR=:9090 ./cocopilot                # Custom port
+COCO_DB_PATH=./myproject.db ./cocopilot          # Custom database
+COCO_NO_BROWSER=true ./cocopilot                 # Suppress browser auto-open
+COCO_REQUIRE_API_KEY=true COCO_API_KEY=$(openssl rand -hex 32) ./cocopilot  # Enable auth
 ```
 
 ---
 
-## Step 3: Create a Project
+## Step 3: Create Tasks
+
+### From the dashboard
+
+Click **New Task** on the board. Fill in the title, instructions, type, and priority.
+
+### From the API
 
 ```bash
-curl -s -X POST http://127.0.0.1:8080/api/v2/projects \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "my-project",
-    "description": "My new project",
-    "workdir": "/path/to/your/repo"
-  }' | jq .
-```
-
-Note the `id` in the response (e.g., `proj_abc123`). You'll use this for all project-scoped operations.
-
-A `default` project (`proj_default`) is created automatically on first run.
-
----
-
-## Step 4: Create Tasks
-
-```bash
-# Simple task
-curl -s -X POST http://127.0.0.1:8080/api/v2/projects/proj_default/tasks \
+curl -s -X POST http://127.0.0.1:8080/api/v2/tasks \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Review codebase architecture",
-    "instructions": "Analyze the project structure and suggest improvements for modularity and testability.",
+    "instructions": "Analyze the project structure and suggest improvements.",
     "type": "REVIEW",
     "priority": 50
-  }' | jq .
-
-# Task with tags
-curl -s -X POST http://127.0.0.1:8080/api/v2/projects/proj_default/tasks \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Add input validation to API endpoints",
-    "instructions": "Add request body validation for all POST/PATCH handlers. Use JSON schema or manual checks.",
-    "type": "MODIFY",
-    "priority": 70,
-    "tags": ["security", "api"]
   }' | jq .
 ```
 
@@ -127,47 +101,65 @@ curl -s -X POST http://127.0.0.1:8080/api/v2/projects/proj_default/tasks \
 
 ---
 
-## Step 5: Claim & Complete Tasks (Agent Workflow)
+## Step 4: Connect an Agent
 
-### Claim the next available task
+Agents claim tasks, do work, and report results. You have three options:
+
+### Option A: Built-in worker (easiest)
 
 ```bash
-curl -s -X POST http://127.0.0.1:8080/api/v2/projects/proj_default/tasks/claim-next \
-  -H "Content-Type: application/json" \
-  -d '{"agent_id": "my-agent"}' | jq .
+./cocopilot worker --project=proj_default
 ```
 
-The response includes:
-- **task** — Full task details with instructions
-- **run** — A tracking record for this execution
-- **context** — Memories, policies, repo files, dependencies
-- **completion_contract** — Expected outputs for this task type
+The worker polls for tasks and processes them automatically.
+
+### Option B: Custom agent loop
+
+```bash
+# Claim the next available task
+CLAIM=$(curl -s -X POST http://127.0.0.1:8080/api/v2/projects/proj_default/tasks/claim-next \
+  -H "Content-Type: application/json" \
+  -d '{"agent_id": "my-agent"}')
+
+# The response includes task details, run tracking, context, and completion contract
+echo "$CLAIM" | jq '.task.instructions'
+```
+
+### Option C: MCP integration (VS Code)
+
+See Step 6 below for connecting via MCP server.
 
 ### Complete a task
 
 ```bash
-curl -s -X POST http://127.0.0.1:8080/api/v2/tasks/1/complete \
+TASK_ID=$(echo "$CLAIM" | jq -r '.task.id')
+curl -s -X POST "http://127.0.0.1:8080/api/v2/tasks/$TASK_ID/complete" \
   -H "Content-Type: application/json" \
-  -d '{
-    "output": "Reviewed the architecture. Found 3 areas for improvement.",
-    "result": {
-      "summary": "Architecture review complete",
-      "changes_made": ["Refactored handler structure", "Added service layer"],
-      "files_touched": ["server/handlers.go", "server/services.go"]
-    }
-  }' | jq .
+  -d '{"output": "Reviewed the architecture. Found 3 areas for improvement.", "summary": "Architecture review complete"}'
 ```
 
-### Fail a task
+### Inspect the results
 
-```bash
-curl -s -X POST http://127.0.0.1:8080/api/v2/tasks/1/fail \
-  -H "Content-Type: application/json" \
-  -d '{
-    "error": "Build failed after changes",
-    "output": "Attempted refactor but tests broke"
-  }' | jq .
-```
+After an agent completes a task, check the dashboard:
+- **Board** — task moves to Completed column
+- **Run details** — click the task to see the run with steps and output
+- **Agent panel** — agent appears with last heartbeat time
+- **Events feed** — creation, claim, and completion events logged
+
+---
+
+## Step 5: Monitor in the Dashboard
+
+The dashboard is where you observe and manage everything:
+
+| View | What it shows |
+|------|---------------|
+| **Board** | Kanban columns with drag-and-drop, filters, and real-time updates |
+| **Agents** | Registered agents, heartbeat timestamps, active leases |
+| **Events** | Chronological feed of all state changes |
+| **Health** | System health audit — DB, migrations, tasks, agents |
+
+All views update in real-time via SSE — no manual refresh needed.
 
 ---
 

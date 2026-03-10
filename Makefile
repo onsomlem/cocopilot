@@ -5,7 +5,7 @@ VERSION := $(shell cat VERSION 2>/dev/null || echo dev)
 LDFLAGS := -ldflags "-X github.com/onsomlem/cocopilot/server.Version=$(VERSION)"
 CMD := ./cmd/cocopilot
 
-.PHONY: build build-all test test-coverage bench clean lint run docker-build docker-run help
+.PHONY: build build-all test test-coverage bench clean lint run docker-build docker-run release verify-release help
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -75,3 +75,43 @@ docker-build: ## Build Docker image
 
 docker-run: docker-build ## Build and run in Docker
 	docker run --rm -p 8080:8080 -v cocopilot-data:/data cocopilot:$(VERSION)
+
+release: ## Build and package a clean release zip
+	bash scripts/package.sh
+
+verify-release: ## Validate release zip is clean
+	@echo "=== Verifying release zip ===" && \
+	VERIFY_DIR=$$(mktemp -d) && \
+	if [ ! -f $(BUILD_DIR)/cocopilot-release.zip ]; then \
+		echo "No release zip found. Run 'make release' first."; \
+		rm -rf "$$VERIFY_DIR"; \
+		exit 1; \
+	fi && \
+	unzip -q $(BUILD_DIR)/cocopilot-release.zip -d "$$VERIFY_DIR" && \
+	FAILED=0 && \
+	if find "$$VERIFY_DIR" -type d -name ".git" | grep -q .; then \
+		echo "FAIL: .git/ directory found in release"; FAILED=1; \
+	fi && \
+	if find "$$VERIFY_DIR" -name "tasks.db*" | grep -q .; then \
+		echo "FAIL: database files found in release"; FAILED=1; \
+	fi && \
+	if find "$$VERIFY_DIR" -type d -name "__MACOSX" | grep -q .; then \
+		echo "FAIL: __MACOSX found in release"; FAILED=1; \
+	fi && \
+	if find "$$VERIFY_DIR" -name ".DS_Store" | grep -q .; then \
+		echo "FAIL: .DS_Store found in release"; FAILED=1; \
+	fi && \
+	if find "$$VERIFY_DIR" -name "*.exe~" | grep -q .; then \
+		echo "FAIL: stray binary artifacts found in release"; FAILED=1; \
+	fi && \
+	if find "$$VERIFY_DIR" -name "coverage.out" | grep -q .; then \
+		echo "FAIL: coverage.out found in release"; FAILED=1; \
+	fi && \
+	FILE_COUNT=$$(find "$$VERIFY_DIR" -type f | wc -l | tr -d ' ') && \
+	ZIP_SIZE=$$(du -sh $(BUILD_DIR)/cocopilot-release.zip | cut -f1) && \
+	rm -rf "$$VERIFY_DIR" && \
+	if [ "$$FAILED" -eq 1 ]; then \
+		echo "FAIL: Release zip contains forbidden artifacts"; \
+		exit 1; \
+	fi && \
+	echo "OK: Release zip clean ($$FILE_COUNT files, $$ZIP_SIZE)"

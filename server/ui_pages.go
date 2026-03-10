@@ -53,10 +53,27 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 .dash-empty { color: #666; text-align: center; padding: 20px; font-size: 12px; }
 </style>`)
 	b.WriteString(`<div class="card"><h1>Dashboard</h1><p class="muted">Overview of your task queue</p></div>`)
-	b.WriteString(`<div id="seed-banner" style="display:none;background:#1e3a5f;border:1px solid #264f78;border-radius:8px;padding:16px 20px;margin-bottom:16px;text-align:center;">
-<div style="font-size:14px;color:#56b6f7;margin-bottom:8px;">Welcome to Cocopilot!</div>
-<div style="font-size:12px;color:#aaa;margin-bottom:12px;">No tasks yet. Seed some demo data to explore the UI.</div>
-<button onclick="seedDemo()" style="background:#0078d4;color:#fff;border:none;padding:8px 20px;border-radius:4px;cursor:pointer;font-size:12px;">Seed Demo Data</button>
+	b.WriteString(`<div id="seed-banner" style="display:none;background:#1e3a5f;border:1px solid #264f78;border-radius:8px;padding:20px 24px;margin-bottom:16px;">
+<div style="font-size:16px;font-weight:600;color:#56b6f7;margin-bottom:12px;">Welcome to Cocopilot</div>
+<div style="display:flex;gap:16px;flex-wrap:wrap;">
+<div id="step-1" style="flex:1;min-width:180px;background:#252526;border:1px solid #3c3c3c;border-radius:8px;padding:14px;">
+<div style="font-size:11px;color:#0078d4;font-weight:600;margin-bottom:6px;">STEP 1</div>
+<div style="font-size:13px;color:#ccc;margin-bottom:8px;">Seed sample tasks</div>
+<div style="font-size:11px;color:#858585;margin-bottom:10px;">Creates 5 example tasks with dependencies so you can explore the board.</div>
+<button onclick="seedDemo()" style="background:#0078d4;color:#fff;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:12px;">Seed Demo Data</button>
+</div>
+<div id="step-2" style="flex:1;min-width:180px;background:#252526;border:1px solid #3c3c3c;border-radius:8px;padding:14px;opacity:0.5;">
+<div style="font-size:11px;color:#0078d4;font-weight:600;margin-bottom:6px;">STEP 2</div>
+<div style="font-size:13px;color:#ccc;margin-bottom:8px;">Start the built-in worker</div>
+<div style="font-size:11px;color:#858585;margin-bottom:10px;">Run this in a second terminal to process tasks automatically:</div>
+<code style="display:block;background:#1e1e1e;border:1px solid #3c3c3c;border-radius:4px;padding:6px 10px;font-size:11px;color:#89d185;word-break:break-all;">go run ./cmd/cocopilot worker proj_default</code>
+</div>
+<div id="step-3" style="flex:1;min-width:180px;background:#252526;border:1px solid #3c3c3c;border-radius:8px;padding:14px;opacity:0.5;">
+<div style="font-size:11px;color:#0078d4;font-weight:600;margin-bottom:6px;">STEP 3</div>
+<div style="font-size:13px;color:#ccc;margin-bottom:8px;">Watch the board</div>
+<div style="font-size:11px;color:#858585;">Open the <a href="/board" style="color:#0078d4;">Board</a> to see tasks move through To Do → In Progress → Done in real time.</div>
+</div>
+</div>
 </div>`)
 	b.WriteString(`<div id="dash-app">
 <div class="dash-grid" id="dash-stats"></div>
@@ -106,7 +123,7 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString(`tbody.appendChild(tr);});}`)
 	// Active agents
 	b.WriteString(`const agentsDiv=document.getElementById('dash-agents');`)
-	b.WriteString(`if(agents.length===0){agentsDiv.innerHTML='<div class="dash-empty">No agents registered</div>';}else{`)
+	b.WriteString(`if(agents.length===0){agentsDiv.innerHTML='<div class="dash-empty">No agents connected</div>';}else{`)
 	b.WriteString(`agentsDiv.innerHTML='';agents.forEach(a=>{const d=document.createElement('div');`)
 	b.WriteString(`d.style.cssText='display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #333;font-size:12px;';`)
 	b.WriteString(`d.innerHTML='<span>'+escapeHtml(a.name||a.id)+'</span><span style="color:'+(a.status==='ONLINE'||a.status==='active'?'#89d185':'#858585')+'">'+escapeHtml(a.status)+'</span>';`)
@@ -121,7 +138,7 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString(`}catch(e){document.getElementById('dash-stats').innerHTML='<div class="dash-card error"><div class="dc-label">Error</div><div class="dc-value">!</div></div>';}}`)
 	b.WriteString(`loadDashboard();setInterval(loadDashboard,15000);`)
 	b.WriteString(`async function seedDemo(){try{const res=await fetch('/api/v2/seed-demo',{method:'POST'});`)
-	b.WriteString(`if(res.ok){document.getElementById('seed-banner').style.display='none';loadDashboard();pageToast('Demo data seeded!','ok');}`)
+	b.WriteString(`if(res.ok){document.getElementById('step-1').style.opacity='0.5';document.getElementById('step-1').querySelector('button').disabled=true;document.getElementById('step-1').querySelector('button').textContent='Seeded \u2713';document.getElementById('step-2').style.opacity='1';document.getElementById('step-3').style.opacity='1';loadDashboard();pageToast('Demo data seeded! Now start the worker (step 2).','ok');}`)
 	b.WriteString(`else{const e=await res.json();pageToast(e.error?.message||'Seed failed','error');}}catch(err){pageToast(err.message,'error');}}`)
 	b.WriteString(`</script>`)
 	b.WriteString(subPageFoot())
@@ -228,7 +245,7 @@ func uiPlaceholderPage(title string, subtitle string, details []string) string {
 		}
 		b.WriteString("</ul>")
 	}
-	b.WriteString("<p class=\"pill\" style=\"display:inline-block;margin-top:10px;\">Placeholder UI route</p>")
+
 	b.WriteString("</div>")
 	b.WriteString(subPageFoot())
 	return b.String()
@@ -731,7 +748,7 @@ func memoryPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("if(!res.ok)throw new Error('http '+res.status);")
 	b.WriteString("const data=await res.json();const items=Array.isArray(data.items)?data.items:[];")
 	b.WriteString("statusEl.textContent=items.length+' items';")
-	b.WriteString("if(items.length===0){bodyEl.innerHTML='<tr><td colspan=\"3\">No memory</td></tr>';return;}")
+	b.WriteString("if(items.length===0){bodyEl.innerHTML='<tr><td colspan=\"3\">No memory entries yet. Use the API or form above to store key-value data.</td></tr>';return;}")
 	b.WriteString("bodyEl.innerHTML='';items.forEach((item)=>{")
 	b.WriteString("const tr=document.createElement('tr');")
 	b.WriteString("const scope=escapeHtml(item.scope);const key=escapeHtml(item.key);")
@@ -822,7 +839,7 @@ func agentsPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString(`const res=await fetch('/api/v2/agents?'+params.toString());if(!res.ok)throw new Error();`)
 	b.WriteString(`const data=await res.json();const agents=Array.isArray(data.agents)?data.agents:[];`)
 	b.WriteString(`statusEl.textContent=agents.length+' agent'+(agents.length!==1?'s':'');`)
-	b.WriteString(`if(agents.length===0){gridEl.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:40px;color:#858585;">No agents registered yet.<br><span style="font-size:11px;color:#666;">Agents auto-register when they claim tasks via the v2 API.</span></div>';return;}`)
+	b.WriteString(`if(agents.length===0){gridEl.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:40px;color:#858585;">No agents connected yet.<br><span style="font-size:11px;color:#666;">Start the built-in worker or connect your own agent to see it here.</span></div>';return;}`)
 	b.WriteString(`gridEl.innerHTML='';agents.forEach((agent)=>{`)
 	b.WriteString(`const hb=heartbeatAge(agent.last_seen);`)
 	b.WriteString(`const statusLower=(agent.status||'unknown').toLowerCase();`)
@@ -972,7 +989,7 @@ func repoPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("const res=await fetch('/api/v2/projects/'+encodeURIComponent(getProjectID())+'/tree');")
 	b.WriteString("if(!res.ok)throw new Error('http '+res.status);")
 	b.WriteString("const data=await res.json();const entries=Array.isArray(data.entries)?data.entries:[];")
-	b.WriteString("if(entries.length===0){treeEl.innerHTML='<li class=\"muted\">No entries</li>';return;}")
+	b.WriteString("if(entries.length===0){treeEl.innerHTML='<li class=\"muted\">No files scanned yet. Scan a directory to populate the repo tree.</li>';return;}")
 	b.WriteString("treeEl.innerHTML='';entries.forEach((e)=>{")
 	b.WriteString("const li=document.createElement('li');")
 	b.WriteString("const isDir=e.is_dir||e.kind==='dir';")
@@ -2720,7 +2737,7 @@ const htmlTemplate = `
                         </div>
                     </template>
                     <div class="empty-column" x-show="progressTasks.length === 0">
-                        <p style="color:var(--vscode-text-muted);">No tasks in progress</p>
+                        <p style="color:var(--vscode-text-muted);">No tasks being worked on</p>
                     </div>
                 </div>
             </div>
@@ -2789,7 +2806,7 @@ const htmlTemplate = `
                         </div>
                     </template>
                     <div class="empty-column" x-show="doneTasks.length === 0">
-                        <p style="color:var(--vscode-text-muted);">No completed tasks</p>
+                        <p style="color:var(--vscode-text-muted);">Nothing completed yet</p>
                     </div>
                 </div>
             </div>

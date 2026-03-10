@@ -7,6 +7,7 @@ on:
 
 jobs:
   go:
+    name: Go Build, Test & Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,6 +17,41 @@ jobs:
       - run: go build ./...
       - run: go vet ./...
       - run: go test -race -count=1 ./...
+      - name: Smoke, contract, and integration tests
+        run: go test -run "TestSmoke|TestContract|TestIntegration" -count=1 -timeout 60s ./server/
+      - name: Verify no test artifacts leaked
+        run: |
+          if ls test_*.db 2>/dev/null | grep -q .; then
+            echo "ERROR: Test DB files leaked to repo root"
+            ls test_*.db
+            exit 1
+          fi
+      - name: Scan for secrets
+        run: |
+          FOUND=0
+          if grep -rl "PRIVATE KEY" --include='*.go' --include='*.json' --include='*.yaml' --include='*.yml' --include='*.md' . 2>/dev/null | grep -v vendor/ | grep -v node_modules/; then
+            echo "WARNING: Files containing 'PRIVATE KEY' found"
+            FOUND=1
+          fi
+          if grep -rn 'sk-[a-zA-Z0-9]\{20,\}\|ghp_[a-zA-Z0-9]\{36\}\|AKIA[A-Z0-9]\{16\}' --include='*.go' . 2>/dev/null | grep -v '_test.go' | grep -v vendor/; then
+            echo "WARNING: Potential hardcoded secrets found"
+            FOUND=1
+          fi
+          if [ "$FOUND" -eq 1 ]; then
+            echo "ERROR: Secret scanning found potential issues"
+            exit 1
+          fi
+      - name: Validate OpenAPI spec syntax
+        run: |
+          python3 -c "
+          import yaml, sys
+          with open('docs/api/openapi-v2.yaml') as f:
+              spec = yaml.safe_load(f)
+          assert spec.get('openapi'), 'Missing openapi version field'
+          assert spec.get('info'), 'Missing info field'
+          assert spec.get('paths'), 'Missing paths field'
+          print(f'OpenAPI spec valid: {len(spec[\"paths\"])} paths defined')
+          "
 
   node-mcp:
     runs-on: ubuntu-latest

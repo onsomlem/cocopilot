@@ -1,85 +1,104 @@
-# Quickstart Guide
+# Getting Started
 
-## Install
+## Install and Launch
 
-**Option A: Download binary**
-```bash
-# Download from GitHub Releases (replace with actual URL)
-curl -L -o cocopilot https://github.com/onsomlem/cocopilot/releases/latest/download/cocopilot-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)
-chmod +x cocopilot
-```
-
-**Option B: Build from source**
 ```bash
 git clone https://github.com/onsomlem/cocopilot.git
 cd cocopilot
 go build -o cocopilot ./cmd/cocopilot
-```
-
-## Start the Server
-
-```bash
 ./cocopilot
-# Server starts on http://127.0.0.1:8080
-# Dashboard available at http://127.0.0.1:8080
 ```
 
-Or use quickstart mode (creates default project + opens browser):
-```bash
-./cocopilot quickstart
-```
+Your browser opens to `http://127.0.0.1:8080` — you'll see the dashboard.
 
-## Create a Task
+## Your First 5 Minutes
+
+### 1. Open the default project
+
+A default project (`proj_default`) is created on first run. Click it in the sidebar to open the board.
+
+### 2. Seed demo data
+
+Click **Seed Demo** in the dashboard header. This populates sample tasks, agents, and runs so you can see the full UI immediately.
+
+### 3. Explore the board
+
+- **Kanban columns** show tasks by status (Pending → In Progress → Completed / Failed)
+- **Filters** let you narrow by type, priority, agent, or tags
+- **Click any task** to see full details, run history, and context
+
+### 4. Watch real-time updates
+
+The dashboard uses SSE (Server-Sent Events) — task status changes, agent heartbeats, and new events appear instantly without page refresh.
+
+### 5. Create your first real task
+
+Click **New Task** on the board, or from the terminal:
 
 ```bash
 curl -s -X POST http://127.0.0.1:8080/api/v2/tasks \
   -H "Content-Type: application/json" \
-  -d '{
-    "instructions": "Review the main.go file and suggest improvements",
-    "title": "Code review",
-    "type": "review",
-    "priority": 50
-  }'
+  -d '{"title": "Review README", "instructions": "Check for outdated info", "priority": 50}'
 ```
 
-## Claim a Task (Agent Loop)
+## Connect an Agent
+
+Agents are programs that poll for tasks, do work, and report results.
+
+### Simple agent loop
 
 ```bash
-# Claim the next available task
-curl -s -X POST http://127.0.0.1:8080/api/v2/projects/proj_default/tasks/claim-next \
+# 1. Claim a task
+CLAIM=$(curl -s -X POST http://127.0.0.1:8080/api/v2/projects/proj_default/tasks/claim-next \
+  -H "Content-Type: application/json" -d '{"agent_id": "my-agent"}')
+
+# 2. Read the instructions
+echo "$CLAIM" | jq '.task.instructions'
+
+# 3. Do the work, then complete
+TASK_ID=$(echo "$CLAIM" | jq -r '.task.id')
+curl -s -X POST "http://127.0.0.1:8080/api/v2/tasks/$TASK_ID/complete" \
   -H "Content-Type: application/json" \
-  -d '{"agent_id": "my-agent"}'
+  -d '{"output": "Reviewed and updated", "summary": "README looks good"}'
 ```
 
-The response includes:
-- Task details and instructions
-- Lease (your claim token)
-- Run (tracking your execution)
-- Context (memories, policies, dependencies, repo files)
-- Completion contract (what outputs are expected)
+The claim response includes everything the agent needs:
+- **task** — full details and instructions
+- **run** — tracking record for this execution
+- **context** — project memories, policies, repo files
+- **completion_contract** — expected output format
 
-## Complete a Task
+### Built-in worker
 
-```bash
-curl -s -X POST http://127.0.0.1:8080/api/v2/tasks/1/complete \
-  -H "Content-Type: application/json" \
-  -d '{
-    "status": "SUCCEEDED",
-    "output": "Reviewed main.go — found 3 areas for improvement",
-    "summary": "Code review complete"
-  }'
-```
+For automated processing without writing your own agent:
 
-## Built-in Worker
-
-For automated task processing:
 ```bash
 ./cocopilot worker --project=proj_default
 ```
 
-## Configuration
+### MCP integration (VS Code)
 
-All configuration is via environment variables:
+Connect Cocopilot tools directly to VS Code Copilot Chat:
+
+```bash
+cd tools/cocopilot-mcp && npm install && npm run build
+```
+
+Then add to `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "cocopilot": {
+      "command": "node",
+      "args": ["tools/cocopilot-mcp/dist/index.js"],
+      "env": { "COCO_API_BASE": "http://localhost:8080" }
+    }
+  }
+}
+```
+
+## Configuration
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -87,5 +106,10 @@ All configuration is via environment variables:
 | `COCO_HTTP_ADDR` | `127.0.0.1:8080` | Listen address |
 | `COCO_REQUIRE_API_KEY` | `false` | Require API key for mutations |
 | `COCO_API_KEY` | — | Shared API key |
+| `COCO_NO_BROWSER` | `false` | Suppress auto-open browser |
 
-See the full list in the README.
+## Next Steps
+
+- [Full Setup Guide](full-setup-guide.md) — MCP, VSIX, Docker, production deployment
+- [Task Authoring](task-authoring.md) — Writing effective tasks for agents
+- [API Reference](api/v2-summary.md) — Full v2 endpoint documentation

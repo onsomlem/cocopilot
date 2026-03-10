@@ -1,20 +1,31 @@
-# Cocopilot — Agentic Task Queue
+# Cocopilot — Local Agent Orchestration Console
 
-A web-based task queue server for orchestrating LLM agents. Provides a Kanban-style UI and HTTP APIs (v1 + v2) for agents to poll for work and submit results. Runs as a single binary backed by SQLite — no external services required.
+Cocopilot is an operator-facing console for orchestrating LLM agents on your machine. It manages **tasks, runs, agents, context, and approvals** through a real-time dashboard — backed by a single binary and SQLite. No external services required.
+
+**What you get:**
+- **Dashboard** — Kanban board with real-time status, filters, and project switching
+- **Task lifecycle** — Create, prioritize, assign, claim, complete, fail tasks with full audit trail
+- **Agent management** — Register agents, track heartbeats, monitor active leases
+- **Run tracking** — Every task execution is a run with steps, logs, and artifacts
+- **Context packs** — Attach repo files, memories, and policies to agent claims
+- **Automation** — Rules engine for auto-creating follow-up tasks
+- **Events & SSE** — Real-time event stream for all state changes
 
 ## Quick Start
 
 ```bash
+# Build and launch
 go build -o cocopilot ./cmd/cocopilot
-./cocopilot                     # starts on http://127.0.0.1:8080
-# Open the URL in your browser — that's it.
+./cocopilot
 ```
 
-Or with Make:
+Your browser opens to `http://127.0.0.1:8080`. From the dashboard:
 
-```bash
-make build && ./cocopilot
-```
+1. **Open a project** — a default project is created automatically
+2. **Seed demo data** — click "Seed Demo" to populate sample tasks and agents
+3. **Watch the board** — tasks appear on the Kanban board with live status updates
+
+To connect an agent or use the built-in worker, see [Getting Started](docs/quickstart.md).
 
 ## Build
 
@@ -25,10 +36,9 @@ make build          # build for current platform → ./cocopilot
 make build-all      # cross-compile darwin/linux amd64/arm64 → dist/
 make test           # go test -race -timeout 180s ./...
 make lint           # go vet ./...
-make clean          # remove build artifacts
+make release        # build + package clean release zip
+make verify-release # validate release zip contents
 ```
-
-Release packaging: `scripts/package.sh` builds the binary and creates a clean zip in `dist/`.
 
 ## Configuration
 
@@ -41,110 +51,88 @@ All settings are via environment variables. Defaults are safe for local use.
 | `COCO_REQUIRE_API_KEY` | `false` | Require API key for mutations |
 | `COCO_API_KEY` | — | Shared API key (when auth enabled) |
 | `COCO_NO_BROWSER` | `false` | Suppress auto-opening browser on start |
-| `COCO_AUTOMATION_RULES` | — | JSON array of automation rules |
-| `COCO_MAX_AUTOMATION_DEPTH` | `5` | Max automation recursion depth |
-| `COCO_AUTOMATION_RATE_LIMIT` | `100` | Max automation executions/hour |
-| `COCO_AUTOMATION_BURST_LIMIT` | `10` | Max automation executions/minute |
-| `COCO_EVENTS_RETENTION_DAYS` | `30` | Auto-prune events older than N days |
-| `COCO_EVENTS_RETENTION_MAX` | `0` | Max event rows to keep (0 = unlimited) |
 
-## API Overview
+See [docs/full-setup-guide.md](docs/full-setup-guide.md) for the full configuration reference.
 
-### v1 (form-encoded, plain-text responses)
+## The Operator Workflow
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/task` | GET | Poll for next available task |
-| `/create` | POST | Create a new task |
-| `/save` | POST | Save task output / results |
-| `/update-status` | POST | Update task status |
-| `/delete` | POST | Delete a task |
-| `/events` | GET | SSE stream (real-time updates) |
+This is the real way to use Cocopilot — not just raw API calls.
 
-### v2 (JSON request/response)
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/v2/projects` | GET/POST | List or create projects |
-| `/api/v2/projects/{id}/tasks` | GET/POST | List or create tasks in a project |
-| `/api/v2/tasks/{id}` | GET/PATCH/DELETE | Task CRUD |
-| `/api/v2/tasks/{id}/claim` | POST | Claim a task (lease-based) |
-| `/api/v2/runs/{id}` | GET/PATCH | Run details and updates |
-| `/api/v2/events` | GET | List events |
-| `/api/v2/events/stream` | GET | SSE stream (v2 format) |
-| `/api/v2/agents` | GET/POST | Agent registration |
-| `/api/v2/health` | GET | Health check |
-| `/api/v2/status` | GET | Server status overview |
-| `/api/v2/metrics` | GET | Detailed metrics |
-| `/api/v2/config` | GET | Runtime configuration |
-| `/api/v2/backup` | GET | Download database backup |
-| `/api/v2/restore` | POST | Upload database restore |
-
-v2 errors follow the format: `{"error": {"code": "...", "message": "...", "details": {...}}}`
-
-## Database
-
-SQLite database auto-creates on first run. Migrations apply automatically on startup.
+### 1. Launch and open a project
 
 ```bash
-./cocopilot migrate status   # check migration status
-./cocopilot migrate up       # apply migrations manually
+./cocopilot                     # dashboard opens at http://127.0.0.1:8080
 ```
 
-Delete `tasks.db` to reset (migrations reapply on next start).
+### 2. Create tasks from the UI or API
 
-## Docker
+Use the dashboard "New Task" button, or:
 
 ```bash
-# Build and run with docker compose
-docker compose up -d
-
-# Or build manually
-make docker-build
-docker run --rm -p 8080:8080 -v cocopilot-data:/data cocopilot:dev
+curl -s -X POST http://127.0.0.1:8080/api/v2/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Review auth module", "instructions": "Check for security issues", "priority": 70}'
 ```
 
-See [docs/deployment.md](docs/deployment.md) for production deployment with systemd, nginx, and automated backups.
+### 3. Connect an agent
+
+Agents claim tasks via the v2 API. The simplest loop:
+
+```bash
+# Claim → work → complete
+CLAIM=$(curl -s -X POST http://127.0.0.1:8080/api/v2/projects/proj_default/tasks/claim-next \
+  -H "Content-Type: application/json" -d '{"agent_id": "my-agent"}')
+# ... agent does work ...
+TASK_ID=$(echo "$CLAIM" | jq -r '.task.id')
+curl -s -X POST "http://127.0.0.1:8080/api/v2/tasks/$TASK_ID/complete" \
+  -H "Content-Type: application/json" -d '{"output": "Done", "summary": "Reviewed auth module"}'
+```
+
+### 4. Monitor everything in the dashboard
+
+- **Board** — drag tasks between columns, filter by status/type/agent
+- **Agents** — see registered agents, last heartbeat, active runs
+- **Runs** — drill into each execution with steps, logs, and artifacts
+- **Events** — real-time feed of all state changes (SSE-powered)
 
 ## Security — Local Only
 
-Cocopilot is designed for **local / single-machine use**. It is NOT intended for public deployment.
+Cocopilot is designed for **local / single-machine use**.
 
-- Default bind address is `127.0.0.1:8080` (localhost only).
-- Do **not** bind to `0.0.0.0` in production or on untrusted networks.
-- Enable API key auth for any non-trivial use: `COCO_REQUIRE_API_KEY=true COCO_API_KEY=<secret>`.
-- The database file contains all task data — protect it accordingly.
-- No TLS built in. Use a reverse proxy if you need HTTPS.
+- Default bind address is `127.0.0.1:8080` (localhost only)
+- Do **not** bind to `0.0.0.0` on untrusted networks
+- Enable API key auth for shared environments: `COCO_REQUIRE_API_KEY=true COCO_API_KEY=<secret>`
+- No TLS built in — use a reverse proxy if you need HTTPS
 
 ## Documentation
 
-| File | Description |
-|------|-------------|
-| [docs/quickstart.md](docs/quickstart.md) | Getting started guide |
-| [docs/full-setup-guide.md](docs/full-setup-guide.md) | Complete setup walkthrough |
-| [docs/api/v2-summary.md](docs/api/v2-summary.md) | API v2 reference |
-| [docs/features.md](docs/features.md) | Comprehensive feature list |
-| [docs/deployment.md](docs/deployment.md) | Production deployment guide |
-| [docs/security.md](docs/security.md) | Security guide |
-| [docs/threat-model.md](docs/threat-model.md) | Threat model |
-| [docs/troubleshooting.md](docs/troubleshooting.md) | Troubleshooting |
-| [docs/task-authoring.md](docs/task-authoring.md) | Task writing best practices |
-| [MIGRATIONS.md](MIGRATIONS.md) | Migration system details |
+| Guide | Description |
+|-------|-------------|
+| [Getting Started](docs/quickstart.md) | First-run walkthrough |
+| [Full Setup Guide](docs/full-setup-guide.md) | Complete setup with MCP, VSIX, and Docker |
+| [Task Authoring](docs/task-authoring.md) | Writing effective tasks for agents |
+
+| Reference | Description |
+|-----------|-------------|
+| [API v2 Reference](docs/api/v2-summary.md) | Full endpoint documentation |
+| [Deployment](docs/deployment.md) | systemd, nginx, Docker production setup |
+| [Security](docs/security.md) | Security model and hardening |
+| [Threat Model](docs/threat-model.md) | Attack surface analysis |
+| [Troubleshooting](docs/troubleshooting.md) | Common issues and fixes |
+| [Migrations](MIGRATIONS.md) | Database migration system |
 
 ## Tooling
 
 | Directory | Description |
 |-----------|-------------|
-| `tools/cocopilot-mcp` | MCP server for VS Code integration (Node.js) |
-| `tools/cocopilot-vsix` | VS Code extension scaffold |
+| `tools/cocopilot-mcp` | MCP server — exposes Cocopilot tools to VS Code Copilot Chat |
+| `tools/cocopilot-vsix` | VS Code extension — sidebar panel for task management |
 
-See each tool's README for setup instructions.
-
-## Benchmarks
+## Docker
 
 ```bash
-go test -bench . -benchtime 5x -timeout 60s .
+docker compose up -d
+# Or: make docker-build && docker run --rm -p 8080:8080 -v cocopilot-data:/data cocopilot:dev
 ```
 
-Benchmarks cover task creation, claim throughput, concurrent claim contention,
-and list endpoint performance. See `load_test.go`.
+See [docs/deployment.md](docs/deployment.md) for production deployment.
