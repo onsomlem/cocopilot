@@ -348,3 +348,74 @@ func v2ConfigHandler(cfg runtimeConfig) http.HandlerFunc {
 		})
 	}
 }
+
+// v2SeedDemoHandler seeds sample data for new installations.
+func v2SeedDemoHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeV2MethodNotAllowed(w, r, http.MethodPost)
+		return
+	}
+
+	// Check if data already exists — refuse to seed if tasks already exist.
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM tasks").Scan(&count); err == nil && count > 0 {
+		writeV2Error(w, http.StatusConflict, "ALREADY_SEEDED", "Database already contains tasks; demo seeding skipped.", nil)
+		return
+	}
+
+	// Ensure a default project exists.
+	var projID string
+	err := db.QueryRow("SELECT id FROM projects LIMIT 1").Scan(&projID)
+	if err != nil {
+		p, cerr := CreateProject(db, "Demo Project", ".", nil)
+		if cerr != nil {
+			writeV2Error(w, http.StatusInternalServerError, "SEED_FAILED", cerr.Error(), nil)
+			return
+		}
+		projID = p.ID
+	}
+
+	title := func(s string) *string { return &s }
+	prio := func(n int) *int { return &n }
+	typ := func(s string) *TaskType { t := TaskType(s); return &t }
+
+	demos := []struct {
+		title string
+		instr string
+		ttype string
+		prio  int
+		tags  []string
+	}{
+		{"Set up CI pipeline", "Configure GitHub Actions for lint, test, and build steps.", "feature", 2, []string{"devops", "ci"}},
+		{"Write API documentation", "Document all v2 endpoints with request/response examples.", "documentation", 3, []string{"docs", "api"}},
+		{"Fix login timeout bug", "Users report session expiry after 5 minutes instead of 30.", "bug", 1, []string{"auth", "urgent"}},
+		{"Add dark mode toggle", "Implement a theme switcher in the settings page.", "feature", 4, []string{"ui", "settings"}},
+		{"Review security headers", "Audit and add missing security headers (CSP, HSTS, etc).", "chore", 2, []string{"security"}},
+	}
+
+	var created []int
+	for _, d := range demos {
+		t, terr := CreateTaskV2WithMeta(db, d.instr, projID, nil, title(d.title), typ(d.ttype), prio(d.prio), d.tags)
+		if terr != nil {
+			writeV2Error(w, http.StatusInternalServerError, "SEED_FAILED", terr.Error(), nil)
+			return
+		}
+		created = append(created, t.ID)
+	}
+
+	// Create a dependency: "Add dark mode" depends on "Fix login timeout"
+	if len(created) >= 4 {
+		_, _ = db.Exec("INSERT INTO task_dependencies (task_id, depends_on_task_id) VALUES (?, ?)", created[3], created[2])
+	}
+
+	// Record an event
+	_, _ = CreateEvent(db, projID, "demo.seeded", "project", projID, map[string]interface{}{
+		"tasks_created": len(created),
+	})
+
+	writeV2JSON(w, http.StatusCreated, map[string]interface{}{
+		"seeded":     true,
+		"project_id": projID,
+		"tasks":      created,
+	})
+}

@@ -130,7 +130,9 @@ func RunWorker(projectID string) error {
 		for {
 			select {
 			case <-ticker.C:
-				workerRegisterAgent(client, baseURL, apiKey)
+				if err := workerRegisterAgent(client, baseURL, apiKey); err != nil {
+					log.Printf("Worker: agent heartbeat warning: %v", err)
+				}
 			case <-heartbeatDone:
 				return
 			}
@@ -170,7 +172,7 @@ func RunWorker(projectID string) error {
 
 		// Log run step: starting execution
 		if claim.RunID != "" {
-			workerLogRunStep(client, baseURL, claim.RunID, apiKey, "execute", "running", "Starting task execution")
+			workerLogRunStep(client, baseURL, claim.RunID, apiKey, "execute", "STARTED", "Starting task execution")
 		}
 
 		// Start lease heartbeat for this task
@@ -182,7 +184,9 @@ func RunWorker(projectID string) error {
 				for {
 					select {
 					case <-ticker.C:
-						workerHeartbeatLease(client, baseURL, leaseID, apiKey)
+						if err := workerHeartbeatLease(client, baseURL, leaseID, apiKey); err != nil {
+							log.Printf("Worker: lease heartbeat warning for %s: %v", leaseID, err)
+						}
 					case <-leaseStop:
 						return
 					}
@@ -197,7 +201,7 @@ func RunWorker(projectID string) error {
 			log.Printf("Worker: executor failed for task #%d: %v", claim.TaskID, execErr)
 			// Log failure step
 			if claim.RunID != "" {
-				workerLogRunStep(client, baseURL, claim.RunID, apiKey, "execute", "failed", fmt.Sprintf("Execution failed: %v", execErr))
+				workerLogRunStep(client, baseURL, claim.RunID, apiKey, "execute", "FAILED", fmt.Sprintf("Execution failed: %v", execErr))
 			}
 			if err := workerFailTask(client, baseURL, claim.TaskID, apiKey, execErr.Error()); err != nil {
 				log.Printf("Worker: failed to fail task #%d: %v", claim.TaskID, err)
@@ -207,7 +211,7 @@ func RunWorker(projectID string) error {
 		} else {
 			// Log success step
 			if claim.RunID != "" {
-				workerLogRunStep(client, baseURL, claim.RunID, apiKey, "execute", "succeeded", "Task execution completed")
+				workerLogRunStep(client, baseURL, claim.RunID, apiKey, "execute", "SUCCEEDED", "Task execution completed")
 			}
 			if err := workerCompleteTask(client, baseURL, claim.TaskID, apiKey, result); err != nil {
 				log.Printf("Worker: failed to complete task #%d: %v", claim.TaskID, err)
@@ -388,12 +392,12 @@ func workerRegisterAgent(client *http.Client, baseURL, apiKey string) error {
 	return nil
 }
 
-func workerHeartbeatLease(client *http.Client, baseURL, leaseID, apiKey string) {
+func workerHeartbeatLease(client *http.Client, baseURL, leaseID, apiKey string) error {
 	url := fmt.Sprintf("%s/api/v2/leases/%s/heartbeat", baseURL, leaseID)
 
 	req, err := http.NewRequest(http.MethodPost, url, nil)
 	if err != nil {
-		return
+		return err
 	}
 	if apiKey != "" {
 		req.Header.Set("X-API-Key", apiKey)
@@ -401,23 +405,28 @@ func workerHeartbeatLease(client *http.Client, baseURL, leaseID, apiKey string) 
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return
+		return err
 	}
 	resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("lease heartbeat returned status %d", resp.StatusCode)
+	}
+	return nil
 }
 
 func workerLogRunStep(client *http.Client, baseURL, runID, apiKey, name, status, details string) {
 	url := fmt.Sprintf("%s/api/v2/runs/%s/steps", baseURL, runID)
 
 	payload := map[string]interface{}{
-		"name":    name,
-		"status":  status,
-		"details": details,
+		"name":   name,
+		"status": status,
+		"details": map[string]interface{}{"message": details},
 	}
 	bodyBytes, _ := json.Marshal(payload)
 
 	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(string(bodyBytes)))
 	if err != nil {
+		log.Printf("Worker: run step log error: %v", err)
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -427,9 +436,13 @@ func workerLogRunStep(client *http.Client, baseURL, runID, apiKey, name, status,
 
 	resp, err := client.Do(req)
 	if err != nil {
+		log.Printf("Worker: run step log error: %v", err)
 		return
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		log.Printf("Worker: run step log returned status %d", resp.StatusCode)
+	}
 }
 
 func toString(v interface{}) string {

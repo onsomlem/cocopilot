@@ -120,13 +120,13 @@ func projectsHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString(`const body={};const n=nameEl.value.trim();if(n)body.name=n;const w=workdirEl.value.trim();if(w)body.workdir=w;const d=descEl.value.trim();if(d)body.description=d;`)
 	b.WriteString(`try{const url=id?'/api/v2/projects/'+encodeURIComponent(id):'/api/v2/projects';`)
 	b.WriteString(`const method=id?'PATCH':'POST';const res=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});`)
-	b.WriteString(`if(!res.ok){const err=await res.json().catch(()=>({}));alert((err.error&&err.error.message)||'Failed');return;}`)
-	b.WriteString(`createModal.classList.remove('open');loadProjects();}catch(err){alert('Network error');}});`)
+	b.WriteString(`if(!res.ok){const err=await res.json().catch(()=>({}));pageToast((err.error&&err.error.message)||'Failed',true);return;}`)
+	b.WriteString(`createModal.classList.remove('open');pageToast('Project saved');loadProjects();}catch(err){pageToast('Network error',true);}});`)
 
 	b.WriteString(`document.getElementById('btn-del-confirm').addEventListener('click',async()=>{if(!deleteTarget)return;`)
 	b.WriteString(`try{const res=await fetch('/api/v2/projects/'+encodeURIComponent(deleteTarget),{method:'DELETE'});`)
-	b.WriteString(`if(!res.ok){const err=await res.json().catch(()=>({}));alert((err.error&&err.error.message)||'Delete failed');return;}`)
-	b.WriteString(`deleteModal.classList.remove('open');deleteTarget=null;loadProjects();}catch(e){alert('Network error');}});`)
+	b.WriteString(`if(!res.ok){const err=await res.json().catch(()=>({}));pageToast((err.error&&err.error.message)||'Delete failed',true);return;}`)
+	b.WriteString(`deleteModal.classList.remove('open');deleteTarget=null;pageToast('Project deleted');loadProjects();}catch(e){pageToast('Network error',true);}});`)
 
 	b.WriteString(`loadProjects();`)
 	b.WriteString(`</script>`)
@@ -238,7 +238,7 @@ func policiesHandler(w http.ResponseWriter, r *http.Request) {
 
 	b.WriteString(`async function togglePolicy(id,enable){try{await fetch('/api/v2/projects/'+encodeURIComponent(pid())+'/policies/'+encodeURIComponent(id)+'/'+(enable?'enable':'disable'),{method:'POST'});loadPolicies();}catch(e){}}`)
 
-	b.WriteString(`async function deletePolicy(id){if(!confirm('Delete this policy?'))return;try{await fetch('/api/v2/projects/'+encodeURIComponent(pid())+'/policies/'+encodeURIComponent(id),{method:'DELETE'});loadPolicies();}catch(e){}}`)
+b.WriteString(`async function deletePolicy(id){if(!window._pageConfirm){deletePolicy2(id);return;}window._pageConfirm('Delete this policy?',()=>deletePolicy2(id));}async function deletePolicy2(id){try{const r=await fetch('/api/v2/projects/'+encodeURIComponent(pid())+'/policies/'+encodeURIComponent(id),{method:'DELETE'});if(r.ok){pageToast('Policy deleted');loadPolicies();}else{pageToast('Failed to delete policy',true);}}catch(e){pageToast('Error',true);}}`)
 
 	b.WriteString(`async function loadPolicies(){statusEl.textContent='Loading...';listEl.innerHTML='';try{`)
 	b.WriteString(`const res=await fetch('/api/v2/projects/'+encodeURIComponent(pid())+'/policies?limit=100');if(!res.ok)throw new Error();`)
@@ -263,8 +263,8 @@ func policiesHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString(`if(!body.name){nameEl.focus();return;}`)
 	b.WriteString(`try{const url='/api/v2/projects/'+encodeURIComponent(pid())+'/policies'+(id?'/'+encodeURIComponent(id):'');`)
 	b.WriteString(`const method=id?'PATCH':'POST';const res=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});`)
-	b.WriteString(`if(!res.ok){const err=await res.json().catch(()=>({}));alert((err.error&&err.error.message)||'Failed');return;}`)
-	b.WriteString(`modal.classList.remove('open');loadPolicies();}catch(err){alert('Network error');}});`)
+	b.WriteString(`if(!res.ok){const err=await res.json().catch(()=>({}));pageToast((err.error&&err.error.message)||'Failed',true);return;}`)
+	b.WriteString(`modal.classList.remove('open');pageToast('Policy saved');loadPolicies();}catch(err){pageToast('Network error',true);}});`)
 
 	b.WriteString(`document.getElementById('pol-refresh').addEventListener('click',loadPolicies);`)
 	b.WriteString(`projectEl.addEventListener('change',loadPolicies);`)

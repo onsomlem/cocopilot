@@ -1638,10 +1638,16 @@ func v2ProjectTasksHandler(w http.ResponseWriter, r *http.Request) {
 	projectID := parts[0]
 
 	var req struct {
-		Instructions     string `json:"instructions"`
-		ParentTaskID     *int   `json:"parent_task_id"`
-		ProjectID        string `json:"project_id"`
-		RequiresApproval bool   `json:"requires_approval"`
+		Instructions     string  `json:"instructions"`
+		ParentTaskID     *int    `json:"parent_task_id"`
+		ProjectID        string  `json:"project_id"`
+		RequiresApproval bool    `json:"requires_approval"`
+		Title            *string `json:"title"`
+		Type             *string `json:"type"`
+		Priority         *int    `json:"priority"`
+		Tags             []string `json:"tags"`
+		DependsOn        []int   `json:"depends_on"`
+		TemplateID       *string `json:"template_id"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -1730,7 +1736,41 @@ func v2ProjectTasksHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	task, err := CreateTaskV2(db, instructions, project.ID, req.ParentTaskID)
+	// If a template is specified, load its defaults first
+	if req.TemplateID != nil && *req.TemplateID != "" {
+		tmpl, err := GetTaskTemplate(db, *req.TemplateID)
+		if err != nil {
+			writeV2Error(w, http.StatusBadRequest, "INVALID_ARGUMENT", "template_id not found", map[string]interface{}{
+				"template_id": *req.TemplateID,
+			})
+			return
+		}
+		// Template provides defaults; explicit request fields override
+		if instructions == "" && tmpl.Instructions != "" {
+			instructions = tmpl.Instructions
+		}
+		if req.Title == nil && tmpl.Name != "" {
+			req.Title = &tmpl.Name
+		}
+		if req.Type == nil && tmpl.DefaultType != nil {
+			req.Type = tmpl.DefaultType
+		}
+		if req.Priority == nil && tmpl.DefaultPriority > 0 {
+			req.Priority = &tmpl.DefaultPriority
+		}
+		if len(req.Tags) == 0 && len(tmpl.DefaultTags) > 0 {
+			req.Tags = tmpl.DefaultTags
+		}
+	}
+
+	// Map type string to TaskType
+	var taskType *TaskType
+	if req.Type != nil {
+		tt := TaskType(strings.ToUpper(*req.Type))
+		taskType = &tt
+	}
+
+	task, err := CreateTaskV2WithMeta(db, instructions, project.ID, req.ParentTaskID, req.Title, taskType, req.Priority, req.Tags)
 	if err != nil {
 		writeV2Error(w, http.StatusInternalServerError, "INTERNAL", err.Error(), map[string]interface{}{
 			"project_id": project.ID,
@@ -1743,6 +1783,13 @@ func v2ProjectTasksHandler(w http.ResponseWriter, r *http.Request) {
 		task.RequiresApproval = true
 		s := ApprovalPending
 		task.ApprovalStatus = &s
+	}
+
+	// Add dependencies if specified
+	for _, depID := range req.DependsOn {
+		if depID > 0 {
+			CreateTaskDependency(db, task.ID, depID)
+		}
 	}
 
 	go broadcastUpdate(v1EventTypeTasks)

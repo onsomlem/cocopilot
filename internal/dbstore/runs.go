@@ -84,6 +84,35 @@ func GetRunsByTaskID(db *sql.DB, taskID int) ([]models.Run, error) {
 	return runs, nil
 }
 
+// ListRecentRuns returns the most recent runs across all tasks, ordered by started_at DESC.
+func ListRecentRuns(db *sql.DB, limit int) ([]models.Run, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	rows, err := db.Query(`
+		SELECT id, task_id, agent_id, status, started_at, finished_at, error
+		FROM runs ORDER BY started_at DESC LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query recent runs: %w", err)
+	}
+	defer rows.Close()
+
+	var runs []models.Run
+	for rows.Next() {
+		var run models.Run
+		var finishedAt, errorMsg sql.NullString
+		err := rows.Scan(&run.ID, &run.TaskID, &run.AgentID, &run.Status, &run.StartedAt, &finishedAt, &errorMsg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan run: %w", err)
+		}
+		run.FinishedAt = models.PtrString(finishedAt)
+		run.Error = models.PtrString(errorMsg)
+		runs = append(runs, run)
+	}
+	return runs, nil
+}
+
 func UpdateRunStatus(db *sql.DB, runID string, status models.RunStatus, errorMsg *string) error {
 	finishedAt := models.NowISO()
 	_, err := db.Exec(`

@@ -29,10 +29,36 @@ run: build ## Build and run the server
 test: ## Run tests with race detection
 	go test -race -timeout 180s ./...
 
+test-unit: ## Run unit tests only
+	go test -run "TestUnit" -timeout 30s ./server/
+
+test-e2e: ## Run e2e tests only
+	go test -run "TestE2E|TestScannerE2E" -timeout 60s ./server/
+
+test-smoke: ## Run smoke tests for all routes
+	go test -run "TestSmoke" -timeout 30s ./server/
+
+test-contract: ## Run API contract tests
+	go test -run "TestContract" -timeout 30s ./server/
+
+test-integration: ## Run integration lifecycle tests
+	go test -run "TestIntegration" -timeout 60s ./server/
+
 test-coverage: ## Run tests and show coverage report
 	go test -coverprofile=coverage.out -timeout 180s ./server/
 	go tool cover -func=coverage.out | tail -1
 	@echo "Run 'go tool cover -html=coverage.out' for detailed HTML report"
+
+test-ci: build test ## CI pipeline: build, test with race detection, coverage gate
+	@go test -coverprofile=coverage.out -timeout 180s ./server/ > /dev/null 2>&1; \
+	total=$$(go tool cover -func=coverage.out | grep total | awk '{print $$3}' | tr -d '%'); \
+	echo "Coverage: $${total}%"; \
+	threshold=65; \
+	if [ $$(echo "$${total} < $${threshold}" | bc) -eq 1 ]; then \
+		echo "FAIL: coverage $${total}% is below $${threshold}% threshold"; \
+		exit 1; \
+	fi; \
+	echo "CI: All checks passed"
 
 bench: ## Run benchmarks
 	go test -bench . -benchtime 5x -timeout 60s ./server/

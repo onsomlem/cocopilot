@@ -1226,6 +1226,9 @@ func v2TaskClaimHandler(w http.ResponseWriter, r *http.Request, rawID string) {
 		req.Mode = "exclusive"
 	}
 
+	// Auto-register or touch agent record so agents are visible in the UI
+	_ = EnsureAgent(db, req.AgentID)
+
 	if _, err := GetTaskV2(db, taskID); err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			writeV2Error(w, http.StatusNotFound, "NOT_FOUND", err.Error(), map[string]interface{}{

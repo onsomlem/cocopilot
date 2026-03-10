@@ -25,6 +25,10 @@ jobs:
       - name: Test with race detection
         run: go test -race -count=1 ./...
 
+      - name: Smoke and contract tests
+        run: |
+          go test -run "TestSmoke|TestContract|TestIntegration" -count=1 -timeout 60s ./server/
+
       - name: Verify no test artifacts leaked
         run: |
           if ls test_*.db 2>/dev/null | grep -q .; then

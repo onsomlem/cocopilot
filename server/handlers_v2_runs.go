@@ -3,12 +3,36 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
 // ============================================================================
 // API v2 Run Handlers
 // ============================================================================
+
+// v2ListRunsHandler handles GET /api/v2/runs — lists recent runs.
+func v2ListRunsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeV2MethodNotAllowed(w, r, http.MethodGet)
+		return
+	}
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	runs, err := ListRecentRuns(db, limit)
+	if err != nil {
+		writeV2Error(w, http.StatusInternalServerError, "INTERNAL", err.Error(), nil)
+		return
+	}
+	if runs == nil {
+		runs = []Run{}
+	}
+	writeV2JSON(w, http.StatusOK, map[string]interface{}{"runs": runs, "total": len(runs)})
+}
 
 func v2RunsRouteHandler(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/v2/runs/")

@@ -174,3 +174,47 @@ func TestV2TaskClaimMethodNotAllowed(t *testing.T) {
 	}
 	assertV2ErrorEnvelope(t, w, "METHOD_NOT_ALLOWED")
 }
+
+func TestV2TaskClaimAutoUpsertsAgent(t *testing.T) {
+	testDB, cleanup := setupV2TestDB(t)
+	defer cleanup()
+
+	mux := http.NewServeMux()
+	registerRoutes(mux, runtimeConfig{})
+
+	// Create a task
+	result, err := testDB.Exec(
+		"INSERT INTO tasks (instructions, status, status_v2, project_id) VALUES (?, ?, ?, ?)",
+		"auto-upsert test", StatusNotPicked, TaskStatusQueued, "proj_default",
+	)
+	if err != nil {
+		t.Fatalf("insert task: %v", err)
+	}
+	taskID, _ := result.LastInsertId()
+
+	// Verify agent does NOT exist yet
+	_, agentErr := GetAgent(db, "new-agent-xyz")
+	if agentErr == nil {
+		t.Fatal("agent should not exist before claim")
+	}
+
+	// Claim with a new agent_id
+	body := `{"agent_id":"new-agent-xyz"}`
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v2/tasks/%d/claim", taskID), bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("claim returned %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify agent now exists
+	agent, err := GetAgent(db, "new-agent-xyz")
+	if err != nil {
+		t.Fatalf("agent should exist after claim: %v", err)
+	}
+	if agent.Status != "ONLINE" {
+		t.Errorf("expected agent status ONLINE, got %s", agent.Status)
+	}
+}

@@ -13,11 +13,11 @@ func TestSmokeUI_IndexHandler(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 	indexHandler(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("indexHandler returned %d", w.Code)
+	if w.Code != http.StatusFound {
+		t.Fatalf("indexHandler returned %d, expected 302 redirect", w.Code)
 	}
-	if ct := w.Header().Get("Content-Type"); ct != "text/html; charset=utf-8" {
-		t.Fatalf("unexpected content-type: %s", ct)
+	if loc := w.Header().Get("Location"); loc != "/dashboard" {
+		t.Fatalf("expected redirect to /dashboard, got %s", loc)
 	}
 }
 
@@ -552,5 +552,67 @@ func TestSmokeRegisterRoutes(t *testing.T) {
 		if w.Code == http.StatusNotFound {
 			t.Errorf("%s %s returned 404 — route not registered", tc.method, tc.path)
 		}
+	}
+}
+
+// TestSmokePublicNavSuite asserts every public navigation route returns a
+// non-404 status, covering all UI pages and key API endpoints.
+func TestSmokePublicNavSuite(t *testing.T) {
+	_, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	mux := http.NewServeMux()
+	cfg := runtimeConfig{}
+	registerRoutes(mux, cfg)
+
+	routes := []struct {
+		method string
+		path   string
+	}{
+		// UI pages (primary nav)
+		{http.MethodGet, "/"},
+		{http.MethodGet, "/dashboard"},
+		{http.MethodGet, "/board"},
+		{http.MethodGet, "/runs"},
+		{http.MethodGet, "/agents"},
+		{http.MethodGet, "/repo"},
+		{http.MethodGet, "/events-browser"},
+		// UI pages (secondary nav)
+		{http.MethodGet, "/dependencies"},
+		{http.MethodGet, "/graphs/tasks"},
+		{http.MethodGet, "/memory"},
+		{http.MethodGet, "/health"},
+		{http.MethodGet, "/audit"},
+		{http.MethodGet, "/context-packs"},
+		{http.MethodGet, "/graphs/repo"},
+		// Management pages
+		{http.MethodGet, "/projects"},
+		{http.MethodGet, "/policies"},
+		{http.MethodGet, "/settings"},
+		// API v2 read endpoints
+		{http.MethodGet, "/api/v2/health"},
+		{http.MethodGet, "/api/v2/version"},
+		{http.MethodGet, "/api/v2/metrics"},
+		{http.MethodGet, "/api/v2/status"},
+		{http.MethodGet, "/api/v2/projects"},
+		{http.MethodGet, "/api/v2/tasks"},
+		{http.MethodGet, "/api/v2/agents"},
+		{http.MethodGet, "/api/v2/events"},
+		{http.MethodGet, "/api/v2/runs"},
+		// v1 endpoints
+		{http.MethodGet, "/task"},
+		{http.MethodGet, "/instructions"},
+		{http.MethodGet, "/api/tasks"},
+	}
+
+	for _, tc := range routes {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+			if w.Code == http.StatusNotFound {
+				t.Errorf("%s %s returned 404 — route not registered", tc.method, tc.path)
+			}
+		})
 	}
 }

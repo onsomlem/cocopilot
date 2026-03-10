@@ -13,6 +13,16 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Redirect root to dashboard as the default landing page
+	http.Redirect(w, r, "/dashboard", http.StatusFound)
+}
+
+func boardHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/board" {
+		http.NotFound(w, r)
+		return
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprint(w, htmlTemplate)
 }
@@ -43,6 +53,11 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 .dash-empty { color: #666; text-align: center; padding: 20px; font-size: 12px; }
 </style>`)
 	b.WriteString(`<div class="card"><h1>Dashboard</h1><p class="muted">Overview of your task queue</p></div>`)
+	b.WriteString(`<div id="seed-banner" style="display:none;background:#1e3a5f;border:1px solid #264f78;border-radius:8px;padding:16px 20px;margin-bottom:16px;text-align:center;">
+<div style="font-size:14px;color:#56b6f7;margin-bottom:8px;">Welcome to Cocopilot!</div>
+<div style="font-size:12px;color:#aaa;margin-bottom:12px;">No tasks yet. Seed some demo data to explore the UI.</div>
+<button onclick="seedDemo()" style="background:#0078d4;color:#fff;border:none;padding:8px 20px;border-radius:4px;cursor:pointer;font-size:12px;">Seed Demo Data</button>
+</div>`)
 	b.WriteString(`<div id="dash-app">
 <div class="dash-grid" id="dash-stats"></div>
 <div class="dash-section">
@@ -63,11 +78,11 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 </div>
 </div>`)
 	b.WriteString(`<script>`)
-	b.WriteString(`const escapeHtml=(v)=>String(v??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));`)
 	b.WriteString(`async function loadDashboard(){try{`)
 	b.WriteString(`const [tasksRes,agentsRes]=await Promise.all([fetch('/api/v2/tasks?limit=50'),fetch('/api/v2/agents')]);`)
 	b.WriteString(`const tasksData=tasksRes.ok?await tasksRes.json():{tasks:[]};const agentsData=agentsRes.ok?await agentsRes.json():{agents:[]};`)
 	b.WriteString(`const tasks=Array.isArray(tasksData.tasks)?tasksData.tasks:[];const agents=Array.isArray(agentsData.agents)?agentsData.agents:[];`)
+	b.WriteString(`document.getElementById('seed-banner').style.display=tasks.length===0?'':'none';`)
 	// Stats
 	b.WriteString(`const todo=tasks.filter(t=>t.status==='TODO'||t.status==='PENDING').length;`)
 	b.WriteString(`const inProg=tasks.filter(t=>t.status==='IN_PROGRESS').length;`)
@@ -105,6 +120,9 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString(`ftbody.appendChild(tr);});}`)
 	b.WriteString(`}catch(e){document.getElementById('dash-stats').innerHTML='<div class="dash-card error"><div class="dc-label">Error</div><div class="dc-value">!</div></div>';}}`)
 	b.WriteString(`loadDashboard();setInterval(loadDashboard,15000);`)
+	b.WriteString(`async function seedDemo(){try{const res=await fetch('/api/v2/seed-demo',{method:'POST'});`)
+	b.WriteString(`if(res.ok){document.getElementById('seed-banner').style.display='none';loadDashboard();pageToast('Demo data seeded!','ok');}`)
+	b.WriteString(`else{const e=await res.json();pageToast(e.error?.message||'Seed failed','error');}}catch(err){pageToast(err.message,'error');}}`)
 	b.WriteString(`</script>`)
 	b.WriteString(subPageFoot())
 	fmt.Fprint(w, b.String())
@@ -117,6 +135,7 @@ func subPageHead(title string) string {
 		`<meta name="viewport" content="width=device-width, initial-scale=1.0">` +
 		`<title>` + html.EscapeString(title) + ` - Cocopilot</title>` +
 		`<style>` +
+		`:root{--vscode-bg:#1e1e1e;--vscode-sidebar:#252526;--vscode-input-bg:#3c3c3c;--vscode-border:#3c3c3c;--vscode-text:#cccccc;--vscode-text-muted:#858585;--vscode-descriptionForeground:#858585;--vscode-accent:#0078d4;--vscode-accent-hover:#1c8ae8;--vscode-success:#89d185;--vscode-warning:#cca700;--vscode-info:#3794ff;--vscode-error:#f48771;--vscode-dropdown-bg:#313131;--vscode-charts-green:#388a34;--vscode-charts-red:#c74e39;--vscode-charts-orange:#d18616;--vscode-charts-blue:#2670b8;}` +
 		`*{box-sizing:border-box;margin:0;padding:0;}` +
 		`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:13px;background:#1e1e1e;color:#ccc;min-height:100vh;}` +
 		`.top-nav{background:#252526;border-bottom:1px solid #3c3c3c;padding:10px 20px;display:flex;align-items:center;gap:12px;}` +
@@ -126,6 +145,7 @@ func subPageHead(title string) string {
 		`.top-nav nav{display:flex;align-items:center;gap:8px;font-size:12px;}` +
 		`.top-nav nav a{color:#858585;text-decoration:none;padding:4px 6px;border-radius:4px;transition:all .15s;}` +
 		`.top-nav nav a:hover,.top-nav nav a.active{color:#ccc;background:#3c3c3c;}` +
+		`.nav-sep{color:#3c3c3c;font-size:14px;user-select:none;}` +
 		`.page-body{max-width:1100px;margin:0 auto;padding:24px 20px;}` +
 		`.card{background:#252526;border:1px solid #3c3c3c;border-radius:8px;padding:20px;}` +
 		`h1{font-size:20px;margin:0 0 6px;color:#e0e0e0;}` +
@@ -152,24 +172,29 @@ func subPageHead(title string) string {
 		`.pill{background:#1e1e1e;border:1px solid #3c3c3c;border-radius:999px;padding:4px 10px;font-size:12px;}` +
 		`.footer{background:#252526;border-top:1px solid #3c3c3c;padding:10px 20px;text-align:center;font-size:12px;color:#858585;margin-top:32px;}` +
 		`.footer a{color:#0078d4;text-decoration:none;}.footer a:hover{text-decoration:underline;}` +
-		`</style></head><body>` +
+		`#page-toast{position:fixed;bottom:20px;right:20px;z-index:9999;display:none;padding:10px 16px;border-radius:6px;font-size:12px;color:#ccc;background:#1e1e1e;border:1px solid #3c3c3c;box-shadow:0 4px 12px rgba(0,0,0,0.4);}` +
+		`</style>` +
+		`<script>` +
+		`const escapeHtml=(v)=>String(v??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));` +
+		`function pageToast(msg,isErr){var t=document.getElementById('page-toast');if(!t){t=document.createElement('div');t.id='page-toast';document.body.appendChild(t);}t.textContent=msg;t.style.display='block';t.style.borderColor=isErr?'#f44':'#4caf50';setTimeout(function(){t.style.display='none';},3000);}` +
+		`</script>` +
+		`</head><body>` +
 		`<div class="top-nav">` +
 		`<svg class="nav-icon" width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8.5 1a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zm0 1a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11zm-2 3.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5zm0 2a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5zm0 2a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5z"/></svg>` +
 		`<a class="nav-title" href="/">Cocopilot</a>` +
 		`<nav>` +
 		`<a href="/dashboard">Dashboard</a>` +
-		`<a href="/">Board</a>` +
+		`<a href="/board">Board</a>` +
 		`<a href="/runs">Runs</a>` +
 		`<a href="/agents">Agents</a>` +
 		`<a href="/repo">Repo</a>` +
+		`<a href="/events-browser">Events</a>` +
+		`<span class="nav-sep">|</span>` +
+		`<a href="/dependencies">Dependencies</a>` +
+		`<a href="/graphs/tasks">Task DAG</a>` +
 		`<a href="/memory">Memory</a>` +
 		`<a href="/policies">Policies</a>` +
-		`<a href="/dependencies">Dependencies</a>` +
 		`<a href="/context-packs">Context Packs</a>` +
-		`<a href="/events-browser">Events</a>` +
-		`<a href="/graphs/tasks">Task DAG</a>` +
-		`<a href="/graphs/repo">Repo Graph</a>` +
-		`<a href="/repo">Repo</a>` +
 		`<a href="/audit">Audit</a>` +
 		`<a href="/settings">Settings</a>` +
 		`<a href="/health">Health</a>` +
@@ -290,7 +315,6 @@ func runViewerPage(runID string) string {
 	b.WriteString("const logConsole=document.getElementById('log-console');")
 	b.WriteString("const artifactList=document.getElementById('artifact-list');")
 	b.WriteString("const countOf=(v)=>Array.isArray(v)?v.length:0;")
-	b.WriteString(`const escapeHtml=(v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));`)
 	// Tab switching
 	b.WriteString("document.querySelectorAll('.tab-btn').forEach(btn=>{btn.addEventListener('click',()=>{")
 	b.WriteString("document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));")
@@ -493,7 +517,6 @@ func taskGraphsPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("const infoTitle=document.getElementById('info-title');")
 	b.WriteString("const infoBody=document.getElementById('info-body');")
 	b.WriteString("const infoClose=document.getElementById('info-close');")
-	b.WriteString(`const escapeHtml=(v)=>String(v??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));`)
 	b.WriteString("infoClose.addEventListener('click',()=>infoPanel.classList.remove('open'));")
 	b.WriteString("const statusColors={PENDING:'#858585',READY:'#3794ff',IN_PROGRESS:'#0078d4',BLOCKED:'#f14c4c',DONE:'#89d185',SUCCEEDED:'#89d185',CANCELED:'#858585',FAILED:'#f14c4c',REVIEW:'#cca700'};")
 	// Layout algorithm: Kahn's topological sort to assign layers, then position nodes
@@ -701,7 +724,6 @@ func memoryPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("const projectEl=document.getElementById('memory-project');")
 	b.WriteString("const endpointEl=document.getElementById('memory-endpoint');")
 	b.WriteString("function getProjectID(){return String(projectEl.value||'proj_default').trim();}")
-	b.WriteString(`const escapeHtml=(v)=>String(v??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));`)
 	b.WriteString("async function loadMemory(){const pid=getProjectID();statusEl.textContent='Loading...';")
 	b.WriteString("endpointEl.textContent='/api/v2/projects/'+pid+'/memory?limit=50';")
 	b.WriteString("bodyEl.innerHTML='<tr><td colspan=\"3\">Loading...</td></tr>';try{")
@@ -779,11 +801,22 @@ func agentsPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("<button class=\"btn\" id=\"agents-refresh\" type=\"button\">Refresh</button></div>")
 	b.WriteString("<div class=\"agents-grid\" id=\"agents-grid\"><div style=\"color:#858585;\">Loading...</div></div>")
 	b.WriteString("</div>")
+	b.WriteString(`<div id="agent-toast" style="position:fixed;bottom:20px;right:20px;z-index:999;display:none;padding:10px 16px;border-radius:6px;font-size:12px;color:#ccc;background:#1e1e1e;border:1px solid #3c3c3c;box-shadow:0 4px 12px rgba(0,0,0,0.4);"></div>`)
+	b.WriteString(`<div id="agent-confirm-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:998;justify-content:center;align-items:center;">`)
+	b.WriteString(`<div style="background:#1e1e1e;border:1px solid #3c3c3c;border-radius:8px;padding:20px;max-width:400px;text-align:center;">`)
+	b.WriteString(`<p id="agent-confirm-msg" style="margin:0 0 16px;color:#ccc;font-size:13px;"></p>`)
+	b.WriteString(`<div style="display:flex;gap:8px;justify-content:center;">`)
+	b.WriteString(`<button id="agent-confirm-cancel" style="padding:6px 16px;background:#333;border:1px solid #555;color:#ccc;border-radius:4px;cursor:pointer;">Cancel</button>`)
+	b.WriteString(`<button id="agent-confirm-ok" style="padding:6px 16px;background:#c53030;border:none;color:#fff;border-radius:4px;cursor:pointer;">Delete</button>`)
+	b.WriteString(`</div></div></div>`)
 	b.WriteString("<script>")
 	b.WriteString(`const gridEl=document.getElementById('agents-grid');const statusEl=document.getElementById('agents-status');const refreshBtn=document.getElementById('agents-refresh');const statusFilterEl=document.getElementById('agents-status-filter');`)
-	b.WriteString(`const escapeHtml=(v)=>String(v??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));`)
+	b.WriteString(`function showAgentToast(msg,isError){const t=document.getElementById('agent-toast');t.textContent=msg;t.style.display='block';t.style.borderColor=isError?'#f44':'#4caf50';setTimeout(()=>{t.style.display='none';},3000);}`)
+	b.WriteString(`let _confirmResolve=null;function showAgentConfirm(msg){return new Promise(resolve=>{_confirmResolve=resolve;const overlay=document.getElementById('agent-confirm-overlay');document.getElementById('agent-confirm-msg').textContent=msg;overlay.style.display='flex';});}`)
+	b.WriteString(`document.getElementById('agent-confirm-cancel').addEventListener('click',()=>{document.getElementById('agent-confirm-overlay').style.display='none';if(_confirmResolve)_confirmResolve(false);});`)
+	b.WriteString(`document.getElementById('agent-confirm-ok').addEventListener('click',()=>{document.getElementById('agent-confirm-overlay').style.display='none';if(_confirmResolve)_confirmResolve(true);});`)
 	b.WriteString(`function heartbeatAge(lastSeen){if(!lastSeen)return{pct:0,cls:'stale',label:'never'};const ms=Date.now()-new Date(lastSeen).getTime();const secs=ms/1000;if(secs<60)return{pct:100,cls:'fresh',label:Math.round(secs)+'s ago'};if(secs<300)return{pct:Math.max(40,100-secs/3),cls:'aging',label:Math.round(secs/60)+'m ago'};return{pct:10,cls:'stale',label:secs>86400?Math.round(secs/86400)+'d ago':Math.round(secs/3600)+'h ago'};}`)
-	b.WriteString(`async function deleteAgent(id){if(!confirm('Delete agent '+id+'?'))return;try{const r=await fetch('/api/v2/agents/'+encodeURIComponent(id),{method:'DELETE'});if(r.ok){loadAgents();}else{alert('Failed to delete agent');}}catch(e){alert('Error: '+e.message);}}`)
+	b.WriteString(`async function deleteAgent(id){const ok=await showAgentConfirm('Delete agent '+id+'?');if(!ok)return;try{const r=await fetch('/api/v2/agents/'+encodeURIComponent(id),{method:'DELETE'});if(r.ok){showAgentToast('Agent deleted');loadAgents();}else{showAgentToast('Failed to delete agent',true);}}catch(e){showAgentToast('Error: '+e.message,true);}}`)
 	b.WriteString(`async function loadAgents(){statusEl.textContent='Loading...';gridEl.innerHTML='<div style="color:#858585;">Loading...</div>';try{`)
 	b.WriteString(`const params=new URLSearchParams();const status=String(statusFilterEl.value||'').trim();if(status)params.set('status',status);`)
 	b.WriteString(`const res=await fetch('/api/v2/agents?'+params.toString());if(!res.ok)throw new Error();`)
@@ -802,10 +835,13 @@ func agentsPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString(`+'<div class="agent-card-id">'+escapeHtml(agent.id)+'</div>'`)
 	b.WriteString(`+'<div class="agent-meta" style="margin-top:12px;">'`)
 	b.WriteString(`+'<div><div class="agent-meta-label">Heartbeat</div><div class="agent-meta-value">'+hb.label+'</div><div class="heartbeat-bar"><div class="heartbeat-fill '+hb.cls+'" style="width:'+hb.pct+'%"></div></div></div>'`)
-	b.WriteString(`+'<div><div class="agent-meta-label">Created</div><div class="agent-meta-value">'+(agent.created_at?new Date(agent.created_at).toLocaleString():'—')+'</div></div>'`)
-	b.WriteString(`+'<div><div class="agent-meta-label">Current Task</div><div class="agent-meta-value">'+(meta.current_task?'#'+escapeHtml(meta.current_task):'idle')+'</div></div>'`)
-	b.WriteString(`+'<div><div class="agent-meta-label">Tasks Done</div><div class="agent-meta-value">'+(meta.completed_count||'0')+'</div></div>'`)
+	b.WriteString(`+'<div><div class="agent-meta-label">Created</div><div class="agent-meta-value">'+(agent.created_at||agent.registered_at?new Date(agent.created_at||agent.registered_at).toLocaleString():'—')+'</div></div>'`)
+	b.WriteString(`+'<div><div class="agent-meta-label">Current Task</div><div class="agent-meta-value">'+(meta.current_task?'<a href="/board" style="color:#56b6f7;">#'+escapeHtml(meta.current_task)+'</a>':'<span style="color:#666;">idle</span>')+'</div></div>'`)
+	b.WriteString(`+'<div><div class="agent-meta-label">Current Run</div><div class="agent-meta-value">'+(meta.current_run?'<a href="/runs" style="color:#56b6f7;">'+escapeHtml(String(meta.current_run).substring(0,12))+'</a>':'<span style="color:#666;">—</span>')+'</div></div>'`)
+	b.WriteString(`+'<div><div class="agent-meta-label">Tasks Done</div><div class="agent-meta-value" style="color:#73c991;">'+(meta.completed_count||'0')+'</div></div>'`)
+	b.WriteString(`+'<div><div class="agent-meta-label">Failed</div><div class="agent-meta-value" style="color:'+(Number(meta.failed_count||0)>0?'#f48771':'#666')+';">'+(meta.failed_count||'0')+'</div></div>'`)
 	b.WriteString(`+'</div>'`)
+	b.WriteString(`+(dotCls==='stale'&&meta.current_task?'<div style="margin-top:8px;padding:6px 10px;background:#3a1a1a;border:1px solid #5a2a2a;border-radius:4px;font-size:11px;color:#f48771;">⚠ Agent is stale but still has claimed task #'+escapeHtml(meta.current_task)+'. Lease may be expired.</div>':'')`)
 	b.WriteString(`+capsHtml`)
 	b.WriteString(`+'<div class="agent-actions"><button onclick="deleteAgent(\''+escapeHtml(agent.id)+'\')" class="danger">Delete</button></div>';`)
 	b.WriteString(`gridEl.appendChild(card);});`)
@@ -858,7 +894,6 @@ func auditPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("const refreshBtn=document.getElementById('audit-refresh');")
 	b.WriteString("const typeEl=document.getElementById('audit-type');")
 	b.WriteString("const projectEl=document.getElementById('audit-project');")
-	b.WriteString(`const escapeHtml=(v)=>String(v??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));`)
 	b.WriteString("function renderHeader(){listEl.innerHTML='';")
 	b.WriteString("const header=document.createElement('li');header.className='header';")
 	b.WriteString("header.innerHTML='<span>Kind</span><span>Entity</span><span>Project</span><span>Time</span><span>Details</span>';listEl.appendChild(header);}")
@@ -918,7 +953,7 @@ func repoPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("<div class=\"card\">")
 	b.WriteString("<h1>Repo Panel</h1>")
 	b.WriteString("<div class=\"meta\">")
-	b.WriteString("<label class=\"field\">Project ID<input class=\"input\" id=\"repo-project\" value=\"proj_default\"></label>")
+	b.WriteString("<label class=\"field\">Project ID<select class=\"input\" id=\"repo-project\"><option value=\"\">Loading projects...</option></select></label>")
 	b.WriteString("<button class=\"btn\" id=\"repo-refresh\" type=\"button\">Refresh</button>")
 	b.WriteString("<button class=\"btn\" id=\"repo-scan\" type=\"button\" style=\"background:#0078d4;border-color:#0078d4;color:#fff;\">Scan Repo</button>")
 	b.WriteString("<span id=\"repo-status\" class=\"muted\">Loading...</span></div>")
@@ -932,7 +967,6 @@ func repoPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("const statusEl=document.getElementById('repo-status');")
 	b.WriteString("const refreshBtn=document.getElementById('repo-refresh');")
 	b.WriteString("const projectEl=document.getElementById('repo-project');")
-	b.WriteString(`const escapeHtml=(v)=>String(v??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));`)
 	b.WriteString("function getProjectID(){return String(projectEl.value||'proj_default').trim();}")
 	b.WriteString("async function loadTree(){treeEl.innerHTML='<li>Loading tree...</li>';try{")
 	b.WriteString("const res=await fetch('/api/v2/projects/'+encodeURIComponent(getProjectID())+'/tree');")
@@ -969,7 +1003,16 @@ func repoPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("if(!res.ok)throw new Error('http '+res.status);const data=await res.json();")
 	b.WriteString("statusEl.textContent='Scan complete: '+data.synced+' synced, '+data.total+' total ('+data.scan_duration_ms+'ms)';")
 	b.WriteString("loadAll();}catch(err){statusEl.textContent='Scan failed';}});")
-	b.WriteString("loadAll();")
+	b.WriteString("async function loadProjects(){try{")
+	b.WriteString("const res=await fetch('/api/v2/projects');if(!res.ok)throw new Error('http '+res.status);")
+	b.WriteString("const data=await res.json();const projects=Array.isArray(data.projects)?data.projects:[];")
+	b.WriteString("projectEl.innerHTML='';")
+	b.WriteString("if(projects.length===0){projectEl.innerHTML='<option value=\"proj_default\">proj_default</option>';")
+	b.WriteString("}else{projects.forEach((p)=>{const o=document.createElement('option');o.value=p.id;")
+	b.WriteString("o.textContent=p.name?p.id+' — '+p.name:p.id;projectEl.appendChild(o);});}")
+	b.WriteString("}catch(e){projectEl.innerHTML='<option value=\"proj_default\">proj_default</option>';}")
+	b.WriteString("loadAll();}")
+	b.WriteString("loadProjects();")
 	b.WriteString("</script>")
 	b.WriteString(subPageFoot())
 	fmt.Fprint(w, b.String())
@@ -998,6 +1041,9 @@ func healthDashboardHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("<div class=\"status-bar\" id=\"task-bar\"></div>")
 	b.WriteString("<h2>System Info</h2>")
 	b.WriteString("<table><tbody id=\"sys-info\"><tr><td>Loading...</td></tr></tbody></table>")
+	b.WriteString("<h2>Endpoint Audit</h2>")
+	b.WriteString("<table><thead><tr><th>Check</th><th>Endpoint</th><th>Result</th><th>Latency</th></tr></thead>")
+	b.WriteString("<tbody id=\"audit-body\"><tr><td colspan=\"4\">Running checks...</td></tr></tbody></table>")
 	b.WriteString("</div>")
 	b.WriteString("<script>")
 	b.WriteString("const statsEl=document.getElementById('health-stats');")
@@ -1005,7 +1051,33 @@ func healthDashboardHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("const sysEl=document.getElementById('sys-info');")
 	b.WriteString("const statusEl=document.getElementById('health-status');")
 	b.WriteString("const refreshBtn=document.getElementById('health-refresh');")
+	b.WriteString("const auditBody=document.getElementById('audit-body');")
 	b.WriteString("function makeStat(label,value,cls){return '<div class=\"stat '+(cls||'')+'\"><div class=\"label\">'+label+'</div><div class=\"value\">'+value+'</div></div>';}")
+
+	// Audit check runner
+	b.WriteString("async function runAudit(){auditBody.innerHTML='<tr><td colspan=\"4\">Running checks...</td></tr>';")
+	b.WriteString("const checks=[")
+	b.WriteString("{name:'Health API',url:'/api/v2/health',validate:r=>r.ok},")
+	b.WriteString("{name:'Metrics API',url:'/api/v2/metrics',validate:r=>r.totals!==undefined},")
+	b.WriteString("{name:'Version API',url:'/api/v2/version',validate:r=>r.version!==undefined},")
+	b.WriteString("{name:'Projects List',url:'/api/v2/projects',validate:r=>Array.isArray(r)},")
+	b.WriteString("{name:'Tasks List',url:'/api/v2/tasks',validate:r=>Array.isArray(r.tasks)},")
+	b.WriteString("{name:'Agents List',url:'/api/v2/agents',validate:r=>Array.isArray(r)},")
+	b.WriteString("{name:'Events List',url:'/api/v2/events',validate:r=>Array.isArray(r.events)},")
+	b.WriteString("{name:'Runs List',url:'/api/v2/runs',validate:r=>Array.isArray(r)},")
+	b.WriteString("{name:'Migrations',url:'/api/v2/metrics',validate:r=>r.schema_version&&parseInt(r.schema_version)>=17},")
+	b.WriteString("{name:'v1 Compat (task)',url:'/task',validate:(r,raw)=>raw.status===200||raw.status===204},")
+	b.WriteString("];")
+	b.WriteString("let html='';for(const c of checks){const t0=performance.now();let status='PASS',detail='';")
+	b.WriteString("try{const res=await fetch(c.url);const ms=Math.round(performance.now()-t0);")
+	b.WriteString("if(!res.ok&&c.url!=='/task'){status='FAIL';detail='HTTP '+res.status;}")
+	b.WriteString("else if(c.validate){let body;try{body=await res.json();}catch{body=await res.text();}if(!c.validate(body,res)){status='WARN';detail='Unexpected response';}}")
+	b.WriteString("html+='<tr><td>'+escapeHtml(c.name)+'</td><td><code>'+escapeHtml(c.url)+'</code></td>'")
+	b.WriteString("+'<td style=\"color:'+(status==='PASS'?'#89d185':status==='WARN'?'#ddb347':'#f14c4c')+';font-weight:600\">'+status+(detail?' — '+escapeHtml(detail):'')+'</td>'")
+	b.WriteString("+'<td>'+ms+'ms</td></tr>';")
+	b.WriteString("}catch(err){html+='<tr><td>'+escapeHtml(c.name)+'</td><td><code>'+escapeHtml(c.url)+'</code></td><td style=\"color:#f14c4c;font-weight:600\">FAIL — '+escapeHtml(err.message)+'</td><td>—</td></tr>';}}")
+	b.WriteString("auditBody.innerHTML=html;}")
+
 	b.WriteString("async function loadHealth(){statusEl.textContent='Loading...';try{")
 	b.WriteString("const [hRes,mRes,vRes]=await Promise.all([fetch('/api/v2/health'),fetch('/api/v2/metrics'),fetch('/api/v2/version')]);")
 	b.WriteString("const health=await hRes.json();const metrics=await mRes.json();const version=await vRes.json();")
@@ -1024,7 +1096,7 @@ func healthDashboardHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("rows.forEach(([k,v])=>{sysEl.innerHTML+='<tr><td>'+k+'</td><td>'+v+'</td></tr>';});")
 	b.WriteString("statusEl.textContent='Updated '+new Date().toLocaleTimeString();")
 	b.WriteString("}catch(err){statusEl.textContent='Failed to load health data';}}")
-	b.WriteString("refreshBtn.addEventListener('click',loadHealth);loadHealth();")
+	b.WriteString("refreshBtn.addEventListener('click',()=>{loadHealth();runAudit();});loadHealth();runAudit();")
 	b.WriteString("setInterval(loadHealth,15000);")
 	b.WriteString("</script>")
 	b.WriteString(subPageFoot())
@@ -1069,7 +1141,6 @@ func repoGraphHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("const statsEl=document.getElementById('rg-stats');")
 	b.WriteString("const projectEl=document.getElementById('rg-project');")
 	b.WriteString("const refreshBtn=document.getElementById('rg-refresh');")
-	b.WriteString(`const escapeHtml=(v)=>String(v??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));`)
 	b.WriteString("function buildTree(files){const root={name:'/',children:{},isDir:true};")
 	b.WriteString("files.forEach(f=>{const parts=(f.path||f.name||'').split('/').filter(Boolean);")
 	b.WriteString("let cur=root;parts.forEach((p,i)=>{if(!cur.children[p])cur.children[p]={name:p,children:{},isDir:i<parts.length-1};")
@@ -1168,7 +1239,6 @@ func diffViewerHandler(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("const filesEl=document.getElementById('diff-files');")
 	b.WriteString("const btnUnified=document.getElementById('btn-unified');")
 	b.WriteString("const btnSplit=document.getElementById('btn-split');")
-	b.WriteString(`const escapeHtml=(v)=>String(v??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));`)
 	b.WriteString("let diffText='';let viewMode='unified';")
 	b.WriteString("function parseDiffFiles(text){const files=[];const re=/^diff --git a\\/(.+?) b\\//gm;let m;while((m=re.exec(text))!==null)files.push(m[1]);")
 	b.WriteString("if(files.length===0){const hdr=/^--- a\\/(.+)$/gm;while((m=hdr.exec(text))!==null)files.push(m[1]);}return files;}")
@@ -1218,6 +1288,9 @@ func diffViewerHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func runsPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/runs" {
+		r.URL.Path = "/runs/"
+	}
 	trimmed := strings.TrimPrefix(r.URL.Path, "/runs/")
 	if trimmed == "" || trimmed == "/" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -1301,6 +1374,11 @@ func runsPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func contextPacksPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/context-packs" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, contextPacksCreatePage())
+		return
+	}
 	trimmed := strings.TrimPrefix(r.URL.Path, "/context-packs/")
 	if trimmed == "" || trimmed == "/" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -1332,10 +1410,12 @@ func contextPacksCreatePage() string {
 	b.WriteString("<label for=\"cp-project\">Project ID</label>")
 	b.WriteString("<div class=\"row\">")
 	b.WriteString("<input id=\"cp-project\" name=\"project\" value=\"proj_default\">")
+	b.WriteString("<button class=\"btn\" type=\"button\" id=\"load-tasks-btn\" style=\"font-size:11px;\">Load Tasks</button>")
 	b.WriteString("</div>")
 	b.WriteString("<label for=\"task-id\">Task ID</label>")
 	b.WriteString("<div class=\"row\">")
-	b.WriteString("<input id=\"task-id\" name=\"taskId\" type=\"number\" min=\"1\" placeholder=\"123\" required>")
+	b.WriteString("<select id=\"task-id\" name=\"taskId\" required><option value=\"\">-- select a task --</option></select>")
+	b.WriteString("<input id=\"task-id-manual\" type=\"number\" min=\"1\" placeholder=\"or type ID\" style=\"width:90px;\">")
 	b.WriteString("</div>")
 	b.WriteString("<label for=\"query\">Query (optional)</label>")
 	b.WriteString("<div class=\"row\">")
@@ -1345,31 +1425,51 @@ func contextPacksCreatePage() string {
 	b.WriteString("</form>")
 	b.WriteString("<div class=\"meta\" id=\"cp-endpoint\">POST /api/v2/projects/proj_default/context-packs</div>")
 	b.WriteString("<div class=\"status\" id=\"context-pack-status\">Status: idle</div>")
+	b.WriteString("<div id=\"cp-link\" style=\"display:none;margin-top:8px;\"></div>")
 	b.WriteString("<pre id=\"context-pack-output\">{}</pre>")
 	b.WriteString("</div>")
 	b.WriteString("<script>")
 	b.WriteString("const form=document.getElementById('context-pack-form');")
-	b.WriteString("const taskInput=document.getElementById('task-id');")
+	b.WriteString("const taskSelect=document.getElementById('task-id');")
+	b.WriteString("const taskManual=document.getElementById('task-id-manual');")
 	b.WriteString("const queryInput=document.getElementById('query');")
 	b.WriteString("const projectInput=document.getElementById('cp-project');")
 	b.WriteString("const statusEl=document.getElementById('context-pack-status');")
 	b.WriteString("const outputEl=document.getElementById('context-pack-output');")
 	b.WriteString("const endpointEl=document.getElementById('cp-endpoint');")
+	b.WriteString("const linkEl=document.getElementById('cp-link');")
+	// Load tasks into dropdown
+	b.WriteString("async function loadTasks(){const pid=String(projectInput.value||'proj_default').trim();")
+	b.WriteString("try{const r=await fetch('/api/v2/projects/'+encodeURIComponent(pid)+'/tasks');")
+	b.WriteString("if(!r.ok)return;const d=await r.json();const tasks=d.tasks||[];")
+	b.WriteString("taskSelect.innerHTML='<option value=\"\">-- select a task --</option>';")
+	b.WriteString("tasks.forEach(t=>{const o=document.createElement('option');o.value=t.id;")
+	b.WriteString("o.textContent='#'+t.id+' '+((t.title||'').substring(0,60));taskSelect.appendChild(o);});")
+	b.WriteString("}catch(e){console.error(e);}}")
+	b.WriteString("document.getElementById('load-tasks-btn').addEventListener('click',loadTasks);")
+	b.WriteString("loadTasks();")
+	// Manual ID overrides dropdown
+	b.WriteString("taskManual.addEventListener('input',()=>{if(taskManual.value){taskSelect.value='';}});")
+	b.WriteString("taskSelect.addEventListener('change',()=>{if(taskSelect.value){taskManual.value='';}});")
+	// Form submit
 	b.WriteString("form.addEventListener('submit',async(e)=>{e.preventDefault();")
-	b.WriteString("const taskId=taskInput.value.trim();")
-	b.WriteString("if(!taskId){taskInput.focus();return;}")
+	b.WriteString("const taskId=taskManual.value.trim()||taskSelect.value;")
+	b.WriteString("if(!taskId){statusEl.textContent='Status: select or enter a task ID';return;}")
 	b.WriteString("const pid=String(projectInput.value||'proj_default').trim();")
 	b.WriteString("endpointEl.textContent='POST /api/v2/projects/'+pid+'/context-packs';")
 	b.WriteString("const payload={task_id:parseInt(taskId,10)};")
 	b.WriteString("const query=queryInput.value.trim();")
 	b.WriteString("if(query){payload.query=query;}")
-	b.WriteString("statusEl.textContent='Status: sending...';outputEl.textContent='';")
+	b.WriteString("statusEl.textContent='Status: sending...';outputEl.textContent='';linkEl.style.display='none';")
 	b.WriteString("try{const resp=await fetch('/api/v2/projects/'+encodeURIComponent(pid)+'/context-packs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});")
 	b.WriteString("const text=await resp.text();")
 	b.WriteString("let data=text;try{data=JSON.parse(text);}catch(e){}")
 	b.WriteString("outputEl.textContent=typeof data==='string'?data:JSON.stringify(data,null,2);")
-	b.WriteString("statusEl.textContent='Status: '+resp.status;}")
-	b.WriteString("catch(err){statusEl.textContent='Status: error';outputEl.textContent=String(err);}});")
+	b.WriteString("statusEl.textContent='Status: '+resp.status;")
+	// Show link to view pack on success
+	b.WriteString("if(resp.ok&&typeof data==='object'){const pack=data.context_pack||data;")
+	b.WriteString("if(pack&&pack.id){linkEl.innerHTML='<a href=\"/context-packs/'+encodeURIComponent(pack.id)+'\" style=\"color:#0078d4;\">View pack '+pack.id+'</a>';linkEl.style.display='block';}}")
+	b.WriteString("}catch(err){statusEl.textContent='Status: error';outputEl.textContent=String(err);}});")
 	b.WriteString("</script>")
 	b.WriteString(subPageFoot())
 	return b.String()
@@ -1639,6 +1739,11 @@ const htmlTemplate = `
                 opacity: 0.5;
                 cursor: grabbing;
                 transform: scale(0.98);
+            }
+
+            .task-card.task-blocked {
+                border-left: 3px solid var(--vscode-error);
+                opacity: 0.7;
             }
 
             .card-header {
@@ -1974,7 +2079,14 @@ const htmlTemplate = `
             .badge-blocked { background: rgba(244,135,113,0.2); color: var(--vscode-error); }
             .badge-deps { background: rgba(55,148,255,0.1); color: var(--vscode-text-muted); font-size: 9px; }
             .badge-approval { background: rgba(204,167,0,0.15); color: var(--vscode-warning); }
-            .badge-status-v2 { background: rgba(204,204,204,0.08); color: var(--vscode-text-muted); font-size: 9px; letter-spacing: 0.3px; }
+            .badge-status-v2 { font-size: 9px; letter-spacing: 0.3px; font-weight: 600; }
+            .badge-v2-QUEUED { background: rgba(55,148,255,0.15); color: #56b6f7; }
+            .badge-v2-CLAIMED { background: rgba(204,167,0,0.15); color: #cca700; }
+            .badge-v2-RUNNING { background: rgba(55,148,255,0.2); color: #3794ff; }
+            .badge-v2-SUCCEEDED { background: rgba(137,209,133,0.15); color: #89d185; }
+            .badge-v2-FAILED { background: rgba(244,135,113,0.2); color: #f48771; }
+            .badge-v2-NEEDS_REVIEW { background: rgba(204,167,0,0.2); color: #e8c600; }
+            .badge-v2-CANCELLED { background: rgba(133,133,133,0.15); color: #999; }
 
             /* Task detail drawer */
             .detail-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 480px; background: var(--vscode-sidebar); border-left: 1px solid var(--vscode-border); z-index: 900; box-shadow: -4px 0 16px rgba(0,0,0,0.3); display: flex; flex-direction: column; transform: translateX(100%); transition: transform 0.2s ease; }
@@ -2235,6 +2347,26 @@ const htmlTemplate = `
                             <input type="text" x-model="newTaskTags" placeholder="e.g. backend, urgent, v2"
                                    style="width:100%;background:var(--vscode-input-bg);border:1px solid var(--vscode-border);border-radius:6px;color:var(--vscode-text);font-family:inherit;font-size:13px;padding:10px 12px;outline:none;">
                         </div>
+                        <div class="form-group">
+                            <label>Dependencies (tasks this depends on)</label>
+                            <select x-model="newTaskDependencies" multiple
+                                    style="width:100%;min-height:60px;background:var(--vscode-input-bg);border:1px solid var(--vscode-border);border-radius:6px;color:var(--vscode-text);font-size:13px;padding:6px 8px;outline:none;">
+                                <template x-for="task in tasks.filter(t => t.status !== 'complete')" :key="task.id">
+                                    <option :value="task.id" x-text="'#' + task.id + ': ' + (task.title || task.instructions.substring(0, 50))"></option>
+                                </template>
+                            </select>
+                            <small style="color:var(--vscode-descriptionForeground);font-size:11px;">Hold Ctrl/Cmd to select multiple</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Template (optional)</label>
+                            <select x-model="newTaskTemplateId" @change="applyTemplate()"
+                                    style="width:100%;background:var(--vscode-input-bg);border:1px solid var(--vscode-border);border-radius:6px;color:var(--vscode-text);font-size:13px;padding:10px 12px;outline:none;cursor:pointer;">
+                                <option value="">No template</option>
+                                <template x-for="tmpl in templates" :key="tmpl.id">
+                                    <option :value="tmpl.id" x-text="tmpl.name + (tmpl.description ? ' — ' + tmpl.description : '')"></option>
+                                </template>
+                            </select>
+                        </div>
                         <div class="form-group" style="display:flex;align-items:center;gap:8px;">
                             <input type="checkbox" id="requiresApproval" x-model="newTaskRequiresApproval"
                                    style="width:16px;height:16px;cursor:pointer;">
@@ -2305,7 +2437,7 @@ const htmlTemplate = `
             <span class="header-title">Cocopilot</span>
             <nav class="header-nav" aria-label="Primary">
                 <a href="/dashboard">Dashboard</a>
-                <a href="/projects">Board</a>
+                <a href="/board">Board</a>
                 <a href="/runs">Runs</a>
                 <a href="/agents">Agents</a>
                 <a href="/repo">Repo</a>
@@ -2412,7 +2544,20 @@ const htmlTemplate = `
                 <option value="priority">Priority</option>
                 <option value="id">By ID</option>
             </select>
-            <span class="task-count" x-text="tasks.length + ' task' + (tasks.length !== 1 ? 's' : '') + (searchQuery || filterType || filterPriority || filterAgent ? ' (' + filteredCount + ' matching)' : '')"></span>
+            <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;color:var(--vscode-text-muted);">
+                <input type="checkbox" x-model="filterBlocked" style="margin:0;"> Blocked only
+            </label>
+            <select x-model="filterStatusV2" style="font-size:11px;padding:2px 6px;background:var(--vscode-input-bg);border:1px solid var(--vscode-border);color:var(--vscode-text);border-radius:4px;">
+                <option value="">All states</option>
+                <option value="QUEUED">Queued</option>
+                <option value="CLAIMED">Claimed</option>
+                <option value="RUNNING">Running</option>
+                <option value="SUCCEEDED">Succeeded</option>
+                <option value="FAILED">Failed</option>
+                <option value="NEEDS_REVIEW">Needs Review</option>
+                <option value="CANCELLED">Cancelled</option>
+            </select>
+            <span class="task-count" x-text="tasks.length + ' task' + (tasks.length !== 1 ? 's' : '') + (searchQuery || filterType || filterPriority || filterAgent || filterBlocked || filterStatusV2 ? ' (' + filteredCount + ' matching)' : '')"></span>
             <span x-show="sseReconnecting" x-cloak style="color:var(--vscode-warning);font-size:11px;display:flex;align-items:center;gap:4px;" title="Reconnecting to server...">
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="animation:spin 1s linear infinite;"><path d="M8 1a7 7 0 1 0 7 7h-1.5A5.5 5.5 0 1 1 8 2.5V1z"/></svg>
                 Reconnecting
@@ -2460,7 +2605,7 @@ const htmlTemplate = `
                         <div class="task-card"
                              x-show="matchesSearch(task)"
                              draggable="true"
-                             :class="{ 'dragging': draggingId === task.id }"
+                             :class="{ 'dragging': draggingId === task.id, 'task-blocked': task.blocked }"
                              :data-depth="task.depth || 0"
                              @dragstart="startDrag(task)"
                              @dragend="endDrag"
@@ -2475,10 +2620,11 @@ const htmlTemplate = `
                                         </svg>
                                         from #<span x-text="task.parent_task_id"></span>
                                     </span>
-                                    <span class="card-preview" x-text="task.instructions.substring(0, 40) + (task.instructions.length > 40 ? '...' : '')" x-show="!expandedTasks.includes(task.id) && !task.parent_task_id"></span>
+                                    <span class="card-title" x-show="task.title" x-text="(task.title||'').substring(0, 50) + ((task.title||'').length > 50 ? '...' : '')" :title="task.title" style="font-weight:600;color:#ccc;font-size:12px;"></span>
+                                    <span class="card-preview" x-text="(task.instructions||'').substring(0, 40) + ((task.instructions||'').length > 40 ? '...' : '')" x-show="!expandedTasks.includes(task.id) && !task.parent_task_id && !task.title"></span>
                                 </div>
                                 <div class="card-right">
-                                    <span class="card-time" x-text="formatTime(task.created_at)" :title="task.created_at"></span>
+                                    <span class="card-time" x-text="formatTime(task.updated_at || task.created_at)" :title="task.updated_at || task.created_at"></span>
                                     <button class="delete-btn" @click.stop="deleteTask(task.id)" title="Delete task">
                                         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
                                             <path fill-rule="evenodd" d="M5.75 3V1.5h4.5V3h3.75v1.5H2V3h3.75zm-.5 5.25a.75.75 0 011.5 0v4.5a.75.75 0 01-1.5 0v-4.5zm4 0a.75.75 0 011.5 0v4.5a.75.75 0 01-1.5 0v-4.5zM3.5 5v9.5h9V5h-9z"/>
@@ -2496,7 +2642,7 @@ const htmlTemplate = `
                                 <span class="badge badge-blocked" x-show="task.blocked">BLOCKED</span>
                                 <span class="badge badge-deps" x-show="task.dependency_count" x-text="task.dependency_count + ' dep' + (task.dependency_count > 1 ? 's' : '')"></span>
                                 <span class="badge badge-approval" x-show="task.requires_approval">APPROVAL</span>
-                                <span class="badge badge-status-v2" x-show="task.status_v2 && task.status_v2 !== task.status" x-text="task.status_v2"></span>
+                                <span class="badge badge-status-v2" :class="'badge-v2-' + (task.status_v2 || '')" x-show="task.status_v2 && task.status_v2 !== task.status" x-text="task.status_v2"></span>
                             </div>
                             <div class="card-body" x-show="expandedTasks.includes(task.id)" x-collapse>
                                 <pre class="card-instructions" x-text="task.instructions"></pre>
@@ -2529,7 +2675,7 @@ const htmlTemplate = `
                         <div class="task-card"
                              x-show="matchesSearch(task)"
                              draggable="true"
-                             :class="{ 'dragging': draggingId === task.id }"
+                             :class="{ 'dragging': draggingId === task.id, 'task-blocked': task.blocked }"
                              :data-depth="task.depth || 0"
                              @dragstart="startDrag(task)"
                              @dragend="endDrag"
@@ -2544,10 +2690,11 @@ const htmlTemplate = `
                                         </svg>
                                         from #<span x-text="task.parent_task_id"></span>
                                     </span>
-                                    <span class="card-preview" x-text="task.instructions.substring(0, 40) + (task.instructions.length > 40 ? '...' : '')" x-show="!expandedTasks.includes(task.id) && !task.parent_task_id"></span>
+                                    <span class="card-title" x-show="task.title" x-text="(task.title||'').substring(0, 50) + ((task.title||'').length > 50 ? '...' : '')" :title="task.title" style="font-weight:600;color:#ccc;font-size:12px;"></span>
+                                    <span class="card-preview" x-text="(task.instructions||'').substring(0, 40) + ((task.instructions||'').length > 40 ? '...' : '')" x-show="!expandedTasks.includes(task.id) && !task.parent_task_id && !task.title"></span>
                                 </div>
                                 <div class="card-right">
-                                    <span class="card-time" x-text="formatTime(task.created_at)" :title="task.created_at"></span>
+                                    <span class="card-time" x-text="formatTime(task.updated_at || task.created_at)" :title="task.updated_at || task.created_at"></span>
                                     <button class="delete-btn" @click.stop="deleteTask(task.id)" title="Delete task">
                                         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
                                             <path fill-rule="evenodd" d="M5.75 3V1.5h4.5V3h3.75v1.5H2V3h3.75zm-.5 5.25a.75.75 0 011.5 0v4.5a.75.75 0 01-1.5 0v-4.5zm4 0a.75.75 0 011.5 0v4.5a.75.75 0 01-1.5 0v-4.5zM3.5 5v9.5h9V5h-9z"/>
@@ -2565,7 +2712,7 @@ const htmlTemplate = `
                                 <span class="badge badge-blocked" x-show="task.blocked">BLOCKED</span>
                                 <span class="badge badge-deps" x-show="task.dependency_count" x-text="task.dependency_count + ' dep' + (task.dependency_count > 1 ? 's' : '')"></span>
                                 <span class="badge badge-approval" x-show="task.requires_approval">APPROVAL</span>
-                                <span class="badge badge-status-v2" x-show="task.status_v2 && task.status_v2 !== task.status" x-text="task.status_v2"></span>
+                                <span class="badge badge-status-v2" :class="'badge-v2-' + (task.status_v2 || '')" x-show="task.status_v2 && task.status_v2 !== task.status" x-text="task.status_v2"></span>
                             </div>
                             <div class="card-body" x-show="expandedTasks.includes(task.id)" x-collapse>
                                 <pre class="card-instructions" x-text="task.instructions"></pre>
@@ -2596,7 +2743,7 @@ const htmlTemplate = `
                         <div class="task-card"
                              x-show="matchesSearch(task)"
                              draggable="true"
-                             :class="{ 'dragging': draggingId === task.id }"
+                             :class="{ 'dragging': draggingId === task.id, 'task-blocked': task.blocked }"
                              :data-depth="task.depth || 0"
                              @dragstart="startDrag(task)"
                              @dragend="endDrag"
@@ -2611,10 +2758,11 @@ const htmlTemplate = `
                                         </svg>
                                         from #<span x-text="task.parent_task_id"></span>
                                     </span>
-                                    <span class="card-preview" x-text="task.instructions.substring(0, 40) + (task.instructions.length > 40 ? '...' : '')" x-show="!expandedTasks.includes(task.id) && !task.parent_task_id"></span>
+                                    <span class="card-title" x-show="task.title" x-text="(task.title||'').substring(0, 50) + ((task.title||'').length > 50 ? '...' : '')" :title="task.title" style="font-weight:600;color:#ccc;font-size:12px;"></span>
+                                    <span class="card-preview" x-text="(task.instructions||'').substring(0, 40) + ((task.instructions||'').length > 40 ? '...' : '')" x-show="!expandedTasks.includes(task.id) && !task.parent_task_id && !task.title"></span>
                                 </div>
                                 <div class="card-right">
-                                    <span class="card-time" x-text="formatTime(task.created_at)" :title="task.created_at"></span>
+                                    <span class="card-time" x-text="formatTime(task.updated_at || task.created_at)" :title="task.updated_at || task.created_at"></span>
                                     <button class="delete-btn" @click.stop="deleteTask(task.id)" title="Delete task">
                                         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
                                             <path fill-rule="evenodd" d="M5.75 3V1.5h4.5V3h3.75v1.5H2V3h3.75zm-.5 5.25a.75.75 0 011.5 0v4.5a.75.75 0 01-1.5 0v-4.5zm4 0a.75.75 0 011.5 0v4.5a.75.75 0 01-1.5 0v-4.5zM3.5 5v9.5h9V5h-9z"/>
@@ -2629,7 +2777,7 @@ const htmlTemplate = `
                                 <span class="badge badge-type" x-show="task.type" x-text="task.type"></span>
                                 <span class="badge" :class="task.priority >= 70 ? 'badge-priority-high' : task.priority >= 40 ? 'badge-priority-medium' : 'badge-priority-low'" x-show="task.priority" x-text="task.priority >= 70 ? 'HIGH' : task.priority >= 40 ? 'MED' : 'LOW'"></span>
                                 <span class="badge badge-agent" x-show="task.agent_id" x-text="task.agent_id"></span>
-                                <span class="badge badge-status-v2" x-show="task.status_v2 && task.status_v2 !== task.status" x-text="task.status_v2"></span>
+                                <span class="badge badge-status-v2" :class="'badge-v2-' + (task.status_v2 || '')" x-show="task.status_v2 && task.status_v2 !== task.status" x-text="task.status_v2"></span>
                             </div>
                             <div class="card-body" x-show="expandedTasks.includes(task.id)" x-collapse>
                                 <pre class="card-instructions" x-text="task.instructions"></pre>
@@ -2666,6 +2814,9 @@ const htmlTemplate = `
                     newTaskPriority: '',
                     newTaskTags: '',
                     newTaskRequiresApproval: false,
+                    newTaskDependencies: [],
+                    newTaskTemplateId: '',
+                    templates: [],
                     draggingId: null,
                     draggingTask: null,
                     dragOverColumn: null,
@@ -2683,6 +2834,8 @@ const htmlTemplate = `
                     filterPriority: '',
                     filterAgent: '',
                     filterStatus: '',
+                    filterBlocked: false,
+                    filterStatusV2: '',
                     sseConnected: false,
                     sseReconnecting: false,
 
@@ -2700,6 +2853,8 @@ const htmlTemplate = `
                     matchesSearch(task) {
                         if (this.filterType && (task.type || '').toUpperCase() !== this.filterType.toUpperCase()) return false;
                         if (this.filterAgent && (task.agent_id || '') !== this.filterAgent) return false;
+                        if (this.filterBlocked && !task.blocked) return false;
+                        if (this.filterStatusV2 && (task.status_v2 || '') !== this.filterStatusV2) return false;
                         if (this.filterPriority) {
                             const p = task.priority || 50;
                             if (this.filterPriority === 'high' && p < 70) return false;
@@ -2718,7 +2873,6 @@ const htmlTemplate = `
                     },
 
                     get filteredCount() {
-                        if (!this.searchQuery) return this.tasks.length;
                         return this.tasks.filter(t => this.matchesSearch(t)).length;
                     },
 
@@ -2794,6 +2948,7 @@ const htmlTemplate = `
                         this.fetchWorkdir();
                         this.fetchProjects();
                         this.fetchAgents();
+                        this.fetchTemplates();
                         
                         // Refresh agents status every 30 seconds
                         setInterval(() => {
@@ -2856,9 +3011,44 @@ const htmlTemplate = `
                         }
                     },
 
+                    async fetchTemplates() {
+                        try {
+                            const response = await fetch('/api/v2/projects/' + encodeURIComponent(this.currentProject) + '/templates');
+                            const data = await response.json();
+                            this.templates = data.templates || [];
+                        } catch (error) {
+                            console.error('Failed to fetch templates:', error);
+                            this.templates = [];
+                        }
+                    },
+
+                    applyTemplate() {
+                        if (!this.newTaskTemplateId) return;
+                        const tmpl = this.templates.find(t => t.id === this.newTaskTemplateId);
+                        if (!tmpl) return;
+                        if (!this.newTaskInstructions.trim() && tmpl.instructions) {
+                            this.newTaskInstructions = tmpl.instructions;
+                        }
+                        if (!this.newTaskTitle.trim() && tmpl.name) {
+                            this.newTaskTitle = tmpl.name;
+                        }
+                        if (!this.newTaskType && tmpl.default_type) {
+                            this.newTaskType = tmpl.default_type.toLowerCase();
+                        }
+                        if (!this.newTaskPriority && tmpl.default_priority > 0) {
+                            if (tmpl.default_priority >= 70) this.newTaskPriority = 'high';
+                            else if (tmpl.default_priority >= 40) this.newTaskPriority = 'medium';
+                            else this.newTaskPriority = 'low';
+                        }
+                        if (!this.newTaskTags.trim() && tmpl.default_tags && tmpl.default_tags.length) {
+                            this.newTaskTags = tmpl.default_tags.join(', ');
+                        }
+                    },
+
                     onProjectChange() {
                         // Reconnect SSE with new project filter
                         this.connectSSE();
+                        this.fetchTemplates();
                     },
 
                     formatTime(iso) {
@@ -2953,6 +3143,8 @@ const htmlTemplate = `
                         if (this.newTaskParentId) payload.parent_task_id = parseInt(this.newTaskParentId, 10);
                         if (this.newTaskTags.trim()) payload.tags = this.newTaskTags.split(',').map(t => t.trim()).filter(Boolean);
                         if (this.newTaskRequiresApproval) payload.requires_approval = true;
+                        if (this.newTaskDependencies.length) payload.depends_on = this.newTaskDependencies.map(Number);
+                        if (this.newTaskTemplateId) payload.template_id = this.newTaskTemplateId;
 
                         try {
                             const url = '/api/v2/projects/' + encodeURIComponent(this.currentProject) + '/tasks';
@@ -2979,6 +3171,8 @@ const htmlTemplate = `
                         this.newTaskPriority = '';
                         this.newTaskTags = '';
                         this.newTaskRequiresApproval = false;
+                        this.newTaskDependencies = [];
+                        this.newTaskTemplateId = '';
                         this.showModal = false;
                         this.showToast('Task created', 'success');
                     },

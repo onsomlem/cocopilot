@@ -134,6 +134,9 @@ func GetRun(db *sql.DB, runID string) (*Run, error) { return dbstore.GetRun(db, 
 func GetRunsByTaskID(db *sql.DB, taskID int) ([]Run, error) {
 	return dbstore.GetRunsByTaskID(db, taskID)
 }
+func ListRecentRuns(db *sql.DB, limit int) ([]Run, error) {
+	return dbstore.ListRecentRuns(db, limit)
+}
 func UpdateRunStatus(db *sql.DB, runID string, status RunStatus, errorMsg *string) error {
 	return dbstore.UpdateRunStatus(db, runID, status, errorMsg)
 }

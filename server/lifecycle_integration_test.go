@@ -541,4 +541,149 @@ doneReading:
 	}
 }
 
+// TestIntegration_FirstRunLifecycle exercises the full first-run experience:
+// project → agent → task → claim → heartbeat → run steps → complete → verify
+func TestIntegration_FirstRunLifecycle(t *testing.T) {
+	testDB, cleanup := setupLifecycleTestDB(t)
+	defer cleanup()
+
+	mux := http.NewServeMux()
+	registerRoutes(mux, runtimeConfig{})
+
+	// 1. Create project
+	project, err := CreateProject(testDB, "first-run-proj", "/tmp/test", nil)
+	if err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+
+	// 2. Register agent via API
+	agentBody := `{"name":"test-agent","capabilities":["go","python"],"metadata":{"version":"1.0"}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/agents", strings.NewReader(agentBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("Register agent: expected 201, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var agentResp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&agentResp)
+	agentObj := agentResp["agent"].(map[string]interface{})
+	agentID := agentObj["id"].(string)
+
+	// 3. Create task with metadata
+	taskBody := fmt.Sprintf(`{
+		"instructions":"Build the widget",
+		"project_id":"%s",
+		"title":"Build widget",
+		"type":"MODIFY",
+		"priority":3,
+		"tags":["backend","go"]
+	}`, project.ID)
+	req = httptest.NewRequest(http.MethodPost, "/api/v2/tasks", strings.NewReader(taskBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("Create task: expected 201, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var taskResp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&taskResp)
+	taskID := int(taskResp["task"].(map[string]interface{})["id"].(float64))
+
+	// 4. Claim task
+	claimBody := fmt.Sprintf(`{"agent_id":"%s","mode":"exclusive"}`, agentID)
+	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v2/tasks/%d/claim", taskID), strings.NewReader(claimBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("Claim: expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var claimResp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&claimResp)
+	runObj := claimResp["run"].(map[string]interface{})
+	runID := runObj["id"].(string)
+
+	// 5. Log a run step
+	stepBody := fmt.Sprintf(`{"name":"compile","status":"SUCCEEDED","details":{"output":"ok"}}`)
+	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v2/runs/%s/steps", runID), strings.NewReader(stepBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	// Accept 200/201/204 — the endpoint may vary
+	if rr.Code >= 400 {
+		t.Fatalf("Run step: expected success, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// 7. Complete task
+	completeBody := `{"output":"Widget built","result":{"summary":"done","changes_made":["widget.go"],"files_touched":["widget.go"]}}`
+	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v2/tasks/%d/complete", taskID), strings.NewReader(completeBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("Complete: expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// 8. Verify final state
+	task, err := GetTaskV2(testDB, taskID)
+	if err != nil {
+		t.Fatalf("GetTaskV2: %v", err)
+	}
+	if task.StatusV2 != TaskStatusSucceeded {
+		t.Errorf("task: expected SUCCEEDED, got %s", task.StatusV2)
+	}
+
+	// Verify run completed
+	run, err := GetLatestRunByTaskID(testDB, taskID)
+	if err != nil {
+		t.Fatalf("GetLatestRunByTaskID: %v", err)
+	}
+	if run == nil {
+		t.Fatal("expected run to exist")
+	}
+	if run.Status != RunStatusSucceeded {
+		t.Errorf("run: expected SUCCEEDED, got %s", run.Status)
+	}
+
+	// Verify agent still exists
+	req = httptest.NewRequest(http.MethodGet, "/api/v2/agents/"+agentID, nil)
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("agent detail: expected 200, got %d", rr.Code)
+	}
+
+	// Verify events were recorded
+	events, err := GetEventsByProjectID(testDB, project.ID, 100)
+	if err != nil {
+		t.Fatalf("GetEvents: %v", err)
+	}
+	if len(events) < 2 {
+		t.Errorf("expected at least 2 events, got %d", len(events))
+	}
+
+	// Verify runs list endpoint works
+	req = httptest.NewRequest(http.MethodGet, "/api/v2/runs", nil)
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("runs list: expected 200, got %d", rr.Code)
+	}
+
+	// Verify task appears in tasks list
+	req = httptest.NewRequest(http.MethodGet, "/api/v2/tasks", nil)
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("tasks list: expected 200, got %d", rr.Code)
+	}
+	var listResp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&listResp)
+	tasks := listResp["tasks"].([]interface{})
+	if len(tasks) == 0 {
+		t.Error("expected at least 1 task in list")
+	}
+}
+
 
