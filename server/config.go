@@ -106,121 +106,88 @@ func getInstructions() string {
 	wd := workdir
 	workdirMu.RUnlock()
 
-	return `Those are your general instructions, this is an orchestrator tool for running subagents.
+	return `# Cocopilot Agent Instructions
 
-IMPORTANT - WORKING DIRECTORY:
-All subagents MUST ALWAYS work in the following directory:
-` + "`" + wd + "`" + `
+You are connected to a Cocopilot orchestrator — an agentic task queue that manages
+projects, tasks, runs, memory, dependencies, and automation.
 
-Before doing any work, the subagent must first change to this directory:
+## Working Directory
+
+All work MUST happen in: ` + "`" + wd + "`" + `
+
 ` + "```" + `
 cd ` + wd + `
 ` + "```" + `
 
-## API (v2)
+## Quick Reference (v2 JSON API)
 
-All orchestrator communication uses the v2 JSON API.
+Base URL: http://127.0.0.1:8080
 
-### 1. Register your agent (recommended)
-
+### Register (once)
 ` + "```" + `
-POST http://127.0.0.1:8080/api/v2/agents
-Content-Type: application/json
-
-{"id": "copilot", "name": "GitHub Copilot", "capabilities": ["analyze", "modify", "test"]}
+POST /api/v2/agents  {"id":"copilot","name":"GitHub Copilot","capabilities":["analyze","modify","test"]}
 ` + "```" + `
 
-This makes the agent visible in the Agents dashboard. If you skip this step,
-the server will auto-register a minimal agent record on first claim.
-
-### 2. Claim a task
-
+### Claim next task
 ` + "```" + `
-POST http://127.0.0.1:8080/api/v2/projects/proj_default/tasks/claim-next
-Content-Type: application/json
-
-{"agent_id": "copilot"}
+POST /api/v2/projects/proj_default/tasks/claim-next  {"agent_id":"copilot"}
 ` + "```" + `
+Response: {task, lease, run, context}. Save run_id and lease_id.
+If 404, no tasks available — poll again in 15s.
 
-Response (200):
-` + "```json" + `
-{
-  "task": { "id": 123, "title": "...", "instructions": "...", "status": "IN_PROGRESS", ... },
-  "lease": { "id": "lease_xxx", "expires_at": "..." },
-  "run": { "id": "run_xxx", ... },
-  "context": { "memories": [...], "dependencies": [...] }
-}
+### Log progress
+` + "```" + `
+POST /api/v2/runs/<run_id>/steps    {"name":"step-name","status":"STARTED","details":"..."}
+POST /api/v2/runs/<run_id>/logs     {"stream":"stdout","chunk":"log line"}
 ` + "```" + `
 
-If no tasks are available, the response is 404. Poll again after 15 seconds.
-Save the run ID and lease ID from the response for step logging and heartbeats.
-
-### 3. Log progress via run steps (recommended)
-
+### Heartbeat (every 30s for long tasks)
 ` + "```" + `
-POST http://127.0.0.1:8080/api/v2/runs/<run_id>/steps
-Content-Type: application/json
-
-{"name": "analyze", "status": "running", "details": "Analyzing codebase..."}
+POST /api/v2/leases/<lease_id>/heartbeat
 ` + "```" + `
 
-### 4. Heartbeat the lease (recommended for long tasks)
-
+### Complete or fail
 ` + "```" + `
-POST http://127.0.0.1:8080/api/v2/leases/<lease_id>/heartbeat
-` + "```" + `
-
-Send every 30 seconds to prevent lease expiry and stale task detection.
-
-### 5. Complete a task
-
-` + "```" + `
-POST http://127.0.0.1:8080/api/v2/tasks/<task_id>/complete
-Content-Type: application/json
-
-{
-  "output": "<summarized_output_here>",
-  "result": {
-    "summary": "Brief description of what was done",
-    "changes_made": ["change 1", "change 2"],
-    "files_touched": ["file1.go", "file2.go"]
-  }
-}
+POST /api/v2/tasks/<id>/complete  {"output":"summary","result":{"summary":"...","changes_made":[...],"files_touched":[...]}}
+POST /api/v2/tasks/<id>/fail      {"error":"what failed","output":"partial output"}
 ` + "```" + `
 
-### 6. Fail a task (if execution fails)
-
+### Memory (persist knowledge across tasks)
 ` + "```" + `
-POST http://127.0.0.1:8080/api/v2/tasks/<task_id>/fail
-Content-Type: application/json
-
-{"error": "description of failure", "output": "partial output if any"}
+PUT /api/v2/projects/<pid>/memory  {"scope":"agent","key":"learnings","value":{"notes":"..."},"source_refs":["task_123"]}
+GET /api/v2/projects/<pid>/memory?scope=agent
 ` + "```" + `
 
-### 7. List tasks (optional)
-
+### Dependencies (task ordering)
 ` + "```" + `
-GET http://127.0.0.1:8080/api/v2/tasks?status=pending
+POST /api/v2/tasks/<id>/dependencies  {"depends_on_task_id":42}
+` + "```" + `
+Tasks with unmet dependencies cannot be claimed.
+
+### Context packs (assembled context for a task)
+` + "```" + `
+POST /api/v2/projects/<pid>/context-packs  {"task_id":42,"summary":"...","contents":{...}}
+` + "```" + `
+
+### Events (real-time)
+` + "```" + `
+GET /api/v2/events?type=task.completed&limit=10
+GET /api/v2/events/stream  (SSE)
 ` + "```" + `
 
 ## Workflow
 
-For each instruction, start a sub agent using the ` + "`runSubagent`" + ` tool.
-The subagent must know the task ID so it can complete the task via the v2 API.
+1. Claim a task via claim-next
+2. Read the task instructions and assembled context
+3. Execute the work in the working directory
+4. Log progress via run steps and logs
+5. Complete or fail the task with a summary
+6. Poll for the next task after 15 seconds
 
-At the end of each sub agent, it must:
-1. Produce a summarized output of what it has done
-2. Complete the task using the v2 endpoint above
+Always use ` + "`curl`" + ` for API calls.
 
-After that the subagent returns control to the main orchestrator, which will
-claim the next task after 15 seconds. Use bash command to wait it out and
-then claim the next task. If a new task is claimed, follow these instructions again.
-
-Important Note:
-
-Always use ` + "`curl`" + ` to do the web requests.
-
-For full API reference and autonomous project management, see /instructions-detailed
+For the full API reference (projects, policies, automation, templates, approval),
+see /instructions-detailed
 `
 }
 
