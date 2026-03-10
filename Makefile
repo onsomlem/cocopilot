@@ -5,7 +5,7 @@ VERSION := $(shell cat VERSION 2>/dev/null || echo dev)
 LDFLAGS := -ldflags "-X github.com/onsomlem/cocopilot/server.Version=$(VERSION)"
 CMD := ./cmd/cocopilot
 
-.PHONY: build build-all test test-coverage bench clean lint run docker-build docker-run release verify-release help
+.PHONY: build build-all test test-coverage bench clean lint run docker-build docker-run release verify-release verify-repo gate help
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -142,3 +142,12 @@ verify-repo: ## Check git index for banned artifacts
 		exit 1; \
 	fi && \
 	echo "OK: Repo is clean"
+
+gate: ## Hard release gate: all checks must pass before shipping
+	@echo "=== Release Gate ===" && \
+	echo "[1/5] Repo cleanliness..." && $(MAKE) -s verify-repo && \
+	echo "[2/5] Lint..." && $(MAKE) -s lint && \
+	echo "[3/5] Build..." && $(MAKE) -s build && \
+	echo "[4/5] Tests (race + golden path)..." && go test -race -timeout 180s ./... && \
+	echo "[5/5] Verify release..." && $(MAKE) -s release && $(MAKE) -s verify-release && \
+	echo "" && echo "=== ALL GATES PASSED ==="
