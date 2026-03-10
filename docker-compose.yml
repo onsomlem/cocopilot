@@ -1,0 +1,22 @@
+services:
+  cocopilot:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - cocopilot-data:/data
+    environment:
+      COCO_DB_PATH: /data/tasks.db
+      COCO_HTTP_ADDR: "0.0.0.0:8080"
+      COCO_REQUIRE_API_KEY: "${COCO_REQUIRE_API_KEY:-false}"
+      COCO_API_KEY: "${COCO_API_KEY:-}"
+      COCO_NO_BROWSER: "true"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/v2/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  cocopilot-data:

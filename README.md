@@ -93,6 +93,19 @@ SQLite database auto-creates on first run. Migrations apply automatically on sta
 
 Delete `tasks.db` to reset (migrations reapply on next start).
 
+## Docker
+
+```bash
+# Build and run with docker compose
+docker compose up -d
+
+# Or build manually
+make docker-build
+docker run --rm -p 8080:8080 -v cocopilot-data:/data cocopilot:dev
+```
+
+See [docs/deployment.md](docs/deployment.md) for production deployment with systemd, nginx, and automated backups.
+
 ## Security — Local Only
 
 Cocopilot is designed for **local / single-machine use**. It is NOT intended for public deployment.
@@ -108,7 +121,10 @@ Cocopilot is designed for **local / single-machine use**. It is NOT intended for
 | File | Description |
 |------|-------------|
 | [docs/quickstart.md](docs/quickstart.md) | Getting started guide |
+| [docs/full-setup-guide.md](docs/full-setup-guide.md) | Complete setup walkthrough |
 | [docs/api/v2-summary.md](docs/api/v2-summary.md) | API v2 reference |
+| [docs/features.md](docs/features.md) | Comprehensive feature list |
+| [docs/deployment.md](docs/deployment.md) | Production deployment guide |
 | [docs/security.md](docs/security.md) | Security guide |
 | [docs/threat-model.md](docs/threat-model.md) | Threat model |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Troubleshooting |

@@ -1,0 +1,12 @@
+# Docker ignore for build context
+.git
+*.db
+*.db-wal
+*.db-shm
+dist/
+tmp/
+cocopilot
+cocopilot.exe
+cocopilot.exe~
+*.md
+!README.md

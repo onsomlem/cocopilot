@@ -350,3 +350,175 @@ func TestFailTask_FailThenReclaim(t *testing.T) {
 		t.Errorf("expected 2 runs after fail+reclaim, got %d", runCount)
 	}
 }
+
+// --- FinalizationService wrapper tests ---
+
+func TestFinalizationService_Fail(t *testing.T) {
+	testDB, cleanup := setupFailTestDB(t)
+	defer cleanup()
+
+	_, task := createFailTestTask(t, testDB, "finalization-svc-fail")
+
+	_, err := ClaimTaskByID(testDB, task.ID, "agent-1", "exclusive")
+	if err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+
+	svc := &FinalizationService{DB: testDB}
+	failed, err := svc.Fail(task.ID, "svc failure")
+	if err != nil {
+		t.Fatalf("svc.Fail: %v", err)
+	}
+	if failed.StatusV2 != TaskStatusFailed {
+		t.Errorf("expected FAILED, got %s", failed.StatusV2)
+	}
+}
+
+func TestFinalizationService_Cancel(t *testing.T) {
+	testDB, cleanup := setupFailTestDB(t)
+	defer cleanup()
+
+	_, task := createFailTestTask(t, testDB, "finalization-svc-cancel")
+
+	_, err := ClaimTaskByID(testDB, task.ID, "agent-1", "exclusive")
+	if err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+
+	svc := &FinalizationService{DB: testDB}
+	cancelled, err := svc.Cancel(task.ID, "user cancelled")
+	if err != nil {
+		t.Fatalf("svc.Cancel: %v", err)
+	}
+	if cancelled.StatusV2 != TaskStatusCancelled {
+		t.Errorf("expected CANCELLED, got %s", cancelled.StatusV2)
+	}
+}
+
+func TestFailTask_NonexistentTask(t *testing.T) {
+	testDB, cleanup := setupFailTestDB(t)
+	defer cleanup()
+
+	// Failing a nonexistent task should not panic; GetTaskV2 should error.
+	_, err := FailTask(testDB, 99999, "does not exist")
+	if err == nil {
+		t.Fatal("expected error when failing nonexistent task")
+	}
+}
+
+func TestFailTaskWithError_NonexistentTask(t *testing.T) {
+	testDB, cleanup := setupFailTestDB(t)
+	defer cleanup()
+
+	_, err := FailTaskWithError(testDB, 99999, "does not exist")
+	if err == nil {
+		t.Fatal("expected error when failing nonexistent task")
+	}
+}
+
+func TestFailTask_NoRunNoLease(t *testing.T) {
+	testDB, cleanup := setupFailTestDB(t)
+	defer cleanup()
+
+	_, task := createFailTestTask(t, testDB, "fail-no-run-no-lease")
+
+	// Fail without claiming — no run or lease exist.
+	// FailTask should still succeed (gracefully skip run/lease cleanup).
+	failed, err := FailTask(testDB, task.ID, "unclaimed failure")
+	if err != nil {
+		t.Fatalf("FailTask: %v", err)
+	}
+	if failed.StatusV2 != TaskStatusFailed {
+		t.Errorf("expected FAILED, got %s", failed.StatusV2)
+	}
+
+	// Verify no runs exist.
+	run, _ := GetLatestRunByTaskID(testDB, task.ID)
+	if run != nil {
+		t.Error("expected no run for unclaimed task")
+	}
+
+	// Verify no lease exists.
+	lease, _ := GetLeaseByTaskID(testDB, task.ID)
+	if lease != nil {
+		t.Error("expected no lease for unclaimed task")
+	}
+}
+
+func TestFailTask_EventPayloadContainsError(t *testing.T) {
+	testDB, cleanup := setupFailTestDB(t)
+	defer cleanup()
+
+	project, task := createFailTestTask(t, testDB, "fail-event-payload-detail")
+
+	_, err := ClaimTaskByID(testDB, task.ID, "agent-1", "exclusive")
+	if err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+
+	errMsg := "compilation failed: undefined reference to main"
+	_, err = FailTask(testDB, task.ID, errMsg)
+	if err != nil {
+		t.Fatalf("FailTask: %v", err)
+	}
+
+	events, err := GetEventsByProjectID(testDB, project.ID, 100)
+	if err != nil {
+		t.Fatalf("GetEventsByProjectID: %v", err)
+	}
+
+	for _, ev := range events {
+		if ev.Kind == "task.failed" {
+			if ev.Payload["error"] != errMsg {
+				t.Errorf("event error payload: expected %q, got %v", errMsg, ev.Payload["error"])
+			}
+			statusV1, _ := ev.Payload["status_v1"].(string)
+			if statusV1 != string(StatusFailed) {
+				t.Errorf("event status_v1: expected %s, got %s", StatusFailed, statusV1)
+			}
+			return
+		}
+	}
+	t.Error("task.failed event not found")
+}
+
+func TestFailTask_ClosedDB(t *testing.T) {
+	_, cleanup := setupFailTestDB(t)
+	oldDB := db
+	// Create a separate connection to close, leaving the original db intact.
+	testDBPath := filepath.Join(t.TempDir(), fmt.Sprintf("test_closed_%d.db", time.Now().UnixNano()))
+	closedDB, err := sql.Open("sqlite", testDBPath)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	closedDB.Close()
+	defer func() {
+		db = oldDB
+		cleanup()
+	}()
+
+	_, err = FailTask(closedDB, 1, "should error")
+	if err == nil {
+		t.Fatal("expected error with closed DB")
+	}
+}
+
+func TestFailTaskWithError_ClosedDB(t *testing.T) {
+	_, cleanup := setupFailTestDB(t)
+	oldDB := db
+	testDBPath := filepath.Join(t.TempDir(), fmt.Sprintf("test_closed2_%d.db", time.Now().UnixNano()))
+	closedDB, err := sql.Open("sqlite", testDBPath)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	closedDB.Close()
+	defer func() {
+		db = oldDB
+		cleanup()
+	}()
+
+	_, err = FailTaskWithError(closedDB, 1, "should error")
+	if err == nil {
+		t.Fatal("expected error with closed DB")
+	}
+}
