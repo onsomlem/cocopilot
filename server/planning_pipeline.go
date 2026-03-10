@@ -15,6 +15,7 @@ type PipelineConfig struct {
 	ContinuityThreshold  float64       `json:"continuity_threshold"`
 	CoherenceThreshold   float64       `json:"coherence_threshold"`
 	EnableAntiDrift      bool          `json:"enable_anti_drift"`
+	Executor             StageExecutor `json:"-"` // Optional LLM executor for prompt-driven stages
 }
 
 // DefaultPipelineConfig returns sensible defaults.
@@ -45,6 +46,7 @@ const (
 type StageResult struct {
 	Stage   PipelineStage          `json:"stage"`
 	Success bool                   `json:"success"`
+	Source  string                 `json:"source,omitempty"` // "prompt" or "heuristic"
 	Output  map[string]interface{} `json:"output,omitempty"`
 	Error   string                 `json:"error,omitempty"`
 }
@@ -94,7 +96,7 @@ func RunPlanningPipeline(db *sql.DB, projectID string, cfg PipelineConfig) (*Pip
 	}
 
 	// Stage 0: Recon
-	reconResult := runReconStage(db, projectID, ps)
+	reconResult := runReconStagePrompt(db, projectID, ps, cfg.Executor)
 	result.Stages = append(result.Stages, reconResult)
 	if !reconResult.Success {
 		result.StageFailures = append(result.StageFailures, "recon")
@@ -104,7 +106,7 @@ func RunPlanningPipeline(db *sql.DB, projectID string, cfg PipelineConfig) (*Pip
 	cycle.ReconOutput = reconResult.Output
 
 	// Stage 1: Continuity
-	continuityResult := runContinuityStage(db, projectID, ps, reconResult.Output)
+	continuityResult := runContinuityStagePrompt(db, projectID, ps, reconResult.Output, cfg.Executor)
 	result.Stages = append(result.Stages, continuityResult)
 	if !continuityResult.Success {
 		result.StageFailures = append(result.StageFailures, "continuity")
@@ -112,7 +114,7 @@ func RunPlanningPipeline(db *sql.DB, projectID string, cfg PipelineConfig) (*Pip
 	cycle.ContinuityOutput = continuityResult.Output
 
 	// Stage 2: Gap Analysis
-	gapResult := runGapStage(db, projectID, ps, reconResult.Output, continuityResult.Output)
+	gapResult := runGapStagePrompt(db, projectID, ps, reconResult.Output, continuityResult.Output, cfg.Executor)
 	result.Stages = append(result.Stages, gapResult)
 	if !gapResult.Success {
 		result.StageFailures = append(result.StageFailures, "gap")
@@ -120,7 +122,7 @@ func RunPlanningPipeline(db *sql.DB, projectID string, cfg PipelineConfig) (*Pip
 	cycle.GapOutput = gapResult.Output
 
 	// Stage 3: Prioritization
-	prioResult := runPrioritizationStage(db, projectID, ps, continuityResult.Output, gapResult.Output)
+	prioResult := runPrioritizationStagePrompt(db, projectID, ps, continuityResult.Output, gapResult.Output, cfg.Executor)
 	result.Stages = append(result.Stages, prioResult)
 	if !prioResult.Success {
 		result.StageFailures = append(result.StageFailures, "prioritization")
@@ -128,7 +130,7 @@ func RunPlanningPipeline(db *sql.DB, projectID string, cfg PipelineConfig) (*Pip
 	cycle.PrioritizationOutput = prioResult.Output
 
 	// Stage 4: Task Synthesis
-	synthResult := runSynthesisStage(db, projectID, ps, prioResult.Output, cfg)
+	synthResult := runSynthesisStagePrompt(db, projectID, ps, prioResult.Output, cfg, cfg.Executor)
 	result.Stages = append(result.Stages, synthResult)
 	if !synthResult.Success {
 		result.StageFailures = append(result.StageFailures, "synthesis")
@@ -138,7 +140,7 @@ func RunPlanningPipeline(db *sql.DB, projectID string, cfg PipelineConfig) (*Pip
 	// Stage 5: Anti-Drift Validation
 	var driftResult StageResult
 	if cfg.EnableAntiDrift {
-		driftResult = runAntiDriftStage(db, projectID, ps, synthResult.Output)
+		driftResult = runAntiDriftStagePrompt(db, projectID, ps, synthResult.Output, cfg.Executor)
 	} else {
 		driftResult = StageResult{
 			Stage:   StageAntiDrift,
