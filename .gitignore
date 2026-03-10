@@ -4,7 +4,7 @@
 *.dll
 *.so
 *.dylib
-cocopilot
+/cocopilot
 task-queue
 task-server
 theinf-loop
@@ -49,6 +49,7 @@ tmp/
 # Environment
 .env
 .env.*
+!.env.example
 
 # Secrets and keys
 *.pem
