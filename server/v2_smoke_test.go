@@ -312,9 +312,18 @@ func TestSmokeV1_InstructionsHandler(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/instructions", nil)
 	w := httptest.NewRecorder()
 	instructionsHandler(w, req)
-	// instructionsHandler writes 303 status
-	if w.Code != http.StatusSeeOther {
-		t.Fatalf("instructionsHandler returned %d, want 303", w.Code)
+	if w.Code != http.StatusOK {
+		t.Fatalf("instructionsHandler returned %d, want 200", w.Code)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "text/plain; charset=utf-8" {
+		t.Fatalf("unexpected content-type: %s", ct)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "Cocopilot Agent Instructions") {
+		t.Fatal("instructions body missing expected header")
+	}
+	if !strings.Contains(body, "/api/v2/projects") {
+		t.Fatal("instructions body should reference /api/v2/projects for project discovery")
 	}
 }
 

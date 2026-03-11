@@ -892,14 +892,23 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func instructionsHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusSeeOther)
-	fmt.Fprint(w, getInstructions())
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	baseURL := scheme + "://" + r.Host
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	fmt.Fprint(w, getInstructions(baseURL))
 }
 
 func instructionsDetailedHandler(w http.ResponseWriter, r *http.Request) {
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	baseURL := scheme + "://" + r.Host
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	fmt.Fprint(w, getDetailedInstructions())
+	fmt.Fprint(w, getDetailedInstructions(baseURL))
 }
 
 func getWorkdirHandler(w http.ResponseWriter, r *http.Request) {

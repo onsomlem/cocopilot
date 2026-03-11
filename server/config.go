@@ -1,6 +1,8 @@
 package server
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/onsomlem/cocopilot/internal/config"
@@ -101,10 +103,58 @@ func resolveEventsPruneInterval(cfg runtimeConfig) time.Duration {
 // getInstructions stays in root (depends on workdirMu/workdir from main.go).
 // ---------------------------------------------------------------------------
 
-func getInstructions() string {
+// buildProjectsSection queries the DB for all projects and renders a section
+// listing them with their IDs, names, and workdirs so the agent knows which
+// project(s) to target.
+func buildProjectsSection(baseURL string) string {
+	if db == nil {
+		return ""
+	}
+	projects, err := ListProjects(db)
+	if err != nil || len(projects) == 0 {
+		return fmt.Sprintf(`## Active Projects
+
+No projects found. Create one first:
+`+"```"+`
+curl -s -X POST %s/api/v2/projects -H "Content-Type: application/json" \
+  -d '{"name":"my-project","workdir":"/path/to/workdir"}'
+`+"```"+`
+`, baseURL)
+	}
+
+	var sb strings.Builder
+	sb.WriteString("## Active Projects\n\n")
+	sb.WriteString("| ID | Name | Working Directory |\n")
+	sb.WriteString("|----|------|-------------------|\n")
+	for _, p := range projects {
+		wd := p.Workdir
+		if wd == "" {
+			wd = "(not set)"
+		}
+		sb.WriteString(fmt.Sprintf("| %s | %s | %s |\n", p.ID, p.Name, wd))
+	}
+	sb.WriteString("\n")
+
+	// Identify the primary project (first non-default, or default if only one)
+	primary := projects[0]
+	for _, p := range projects {
+		if p.ID != DefaultProjectID {
+			primary = p
+			break
+		}
+	}
+	sb.WriteString(fmt.Sprintf("**Primary project:** `%s` (%s)\n\n", primary.ID, primary.Name))
+	sb.WriteString("Use the project ID in all project-scoped API calls below.\n\n")
+
+	return sb.String()
+}
+
+func getInstructions(baseURL string) string {
 	workdirMu.RLock()
 	wd := workdir
 	workdirMu.RUnlock()
+
+	projectsSection := buildProjectsSection(baseURL)
 
 	return `# Cocopilot Agent Instructions
 
@@ -119,18 +169,30 @@ All work MUST happen in: ` + "`" + wd + "`" + `
 cd ` + wd + `
 ` + "```" + `
 
+` + projectsSection + `
+
 ## Quick Reference (v2 JSON API)
 
-Base URL: http://127.0.0.1:8080
+Base URL: ` + baseURL + `
 
-### Register (once)
+### Discover projects
+` + "```" + `
+GET /api/v2/projects
+` + "```" + `
+
+### Register agent (once)
 ` + "```" + `
 POST /api/v2/agents  {"id":"copilot","name":"GitHub Copilot","capabilities":["analyze","modify","test"]}
 ` + "```" + `
 
-### Claim next task
+### Create tasks in a project
 ` + "```" + `
-POST /api/v2/projects/proj_default/tasks/claim-next  {"agent_id":"copilot"}
+POST /api/v2/projects/<project_id>/tasks  {"title":"...","instructions":"...","type":"MODIFY","priority":50,"tags":["feature"]}
+` + "```" + `
+
+### Claim next task from a project
+` + "```" + `
+POST /api/v2/projects/<project_id>/tasks/claim-next  {"agent_id":"copilot"}
 ` + "```" + `
 Response: {task, lease, run, context}. Save run_id and lease_id.
 If 404, no tasks available — poll again in 15s.
@@ -154,8 +216,8 @@ POST /api/v2/tasks/<id>/fail      {"error":"what failed","output":"partial outpu
 
 ### Memory (persist knowledge across tasks)
 ` + "```" + `
-PUT /api/v2/projects/<pid>/memory  {"scope":"agent","key":"learnings","value":{"notes":"..."},"source_refs":["task_123"]}
-GET /api/v2/projects/<pid>/memory?scope=agent
+PUT /api/v2/projects/<project_id>/memory  {"scope":"agent","key":"learnings","value":{"notes":"..."},"source_refs":["task_123"]}
+GET /api/v2/projects/<project_id>/memory?scope=agent
 ` + "```" + `
 
 ### Dependencies (task ordering)
@@ -166,28 +228,87 @@ Tasks with unmet dependencies cannot be claimed.
 
 ### Context packs (assembled context for a task)
 ` + "```" + `
-POST /api/v2/projects/<pid>/context-packs  {"task_id":42,"summary":"...","contents":{...}}
+POST /api/v2/projects/<project_id>/context-packs  {"task_id":42,"summary":"...","contents":{...}}
+` + "```" + `
+
+### Policies (governance rules)
+` + "```" + `
+POST /api/v2/projects/<project_id>/policies  {"name":"require-tests","rules":{...},"enabled":true}
+GET  /api/v2/projects/<project_id>/policies
+` + "```" + `
+
+### Automation (event-driven task creation)
+` + "```" + `
+GET  /api/v2/projects/<project_id>/automation/rules
+POST /api/v2/projects/<project_id>/automation/simulate  {"event":{"kind":"task.completed","entity_id":"42"}}
 ` + "```" + `
 
 ### Events (real-time)
 ` + "```" + `
 GET /api/v2/events?type=task.completed&limit=10
-GET /api/v2/events/stream  (SSE)
+GET /api/v2/events/stream  (SSE — real-time push)
+GET /api/v2/projects/<project_id>/events/stream  (project-scoped SSE)
 ` + "```" + `
+
+### Runs & artifacts
+` + "```" + `
+GET  /api/v2/runs/<run_id>
+POST /api/v2/runs/<run_id>/steps      {"name":"...","status":"STARTED","details":"..."}
+POST /api/v2/runs/<run_id>/logs       {"stream":"stdout","chunk":"..."}
+POST /api/v2/runs/<run_id>/artifacts  {"kind":"diff","storage_ref":"...","metadata":{...}}
+` + "```" + `
+
+### Agents & leases
+` + "```" + `
+GET  /api/v2/agents
+POST /api/v2/agents  {"id":"my-agent","name":"My Agent","capabilities":["analyze","modify","test"]}
+POST /api/v2/leases/<lease_id>/heartbeat
+POST /api/v2/leases/<lease_id>/release
+` + "```" + `
+
+### Repo & files
+` + "```" + `
+GET  /api/v2/projects/<project_id>/files
+POST /api/v2/projects/<project_id>/files/scan
+POST /api/v2/projects/<project_id>/files/sync
+GET  /api/v2/projects/<project_id>/tree?depth=3
+GET  /api/v2/projects/<project_id>/changes?since=2025-01-01T00:00:00Z
+` + "```" + `
+
+### System
+` + "```" + `
+GET  /api/v2/health
+GET  /api/v2/status
+GET  /api/v2/metrics
+GET  /api/v2/version
+GET  /api/v2/config
+POST /api/v2/backup
+POST /api/v2/restore
+` + "```" + `
+
+## Task Types
+
+ANALYZE, MODIFY, TEST, REVIEW, DOC, RELEASE, ROLLBACK, PLAN
+
+## Task Status Lifecycle
+
+QUEUED → CLAIMED → RUNNING → SUCCEEDED / FAILED / NEEDS_REVIEW
 
 ## Workflow
 
-1. Claim a task via claim-next
-2. Read the task instructions and assembled context
-3. Execute the work in the working directory
-4. Log progress via run steps and logs
-5. Complete or fail the task with a summary
-6. Poll for the next task after 15 seconds
+1. List projects (GET /api/v2/projects) to find your target project
+2. Claim a task via claim-next using the project ID
+3. Read the task instructions and assembled context
+4. Execute the work in the working directory
+5. Log progress via run steps and logs
+6. Complete or fail the task with a summary
+7. Store learnings in project memory for future tasks
+8. Poll for the next task after 15 seconds
 
 Always use ` + "`curl`" + ` for API calls.
 
-For the full API reference (projects, policies, automation, templates, approval),
-see /instructions-detailed
+For the full API reference (detailed examples, automation rules, template variables),
+see ` + baseURL + `/instructions-detailed
 `
 }
 
@@ -196,12 +317,14 @@ see /instructions-detailed
 // to fully set up, manage, and orchestrate projects autonomously.
 // ---------------------------------------------------------------------------
 
-func getDetailedInstructions() string {
+func getDetailedInstructions(baseURL string) string {
 	workdirMu.RLock()
 	wd := workdir
 	workdirMu.RUnlock()
 
-	return `# Cocopilot — Detailed Agent Instructions
+	projectsSection := buildProjectsSection(baseURL)
+
+	body := `# Cocopilot — Detailed Agent Instructions
 
 ## What is Cocopilot?
 
@@ -210,14 +333,26 @@ providing a Kanban-style task queue with HTTP APIs. Agents poll for work, claim 
 execute them, and report results. The server manages projects, tasks, runs, memory,
 automation, policies, and real-time events.
 
-**Base URL:** http://127.0.0.1:8080
+**Base URL:** ` + baseURL + `
 **Working Directory:** ` + "`" + wd + "`" + `
+
+---
+
+` + projectsSection + `
 
 ---
 
 ## Quick Start (Full Autonomous Setup)
 
-### Step 1: Create a Project
+### Step 0: Discover Projects
+
+` + "```bash" + `
+curl -s ` + baseURL + `/api/v2/projects | jq .
+` + "```" + `
+
+Use the project ID from the response in all project-scoped API calls.
+
+### Step 1: Create a Project (if needed)
 
 ` + "```bash" + `
 curl -s -X POST http://127.0.0.1:8080/api/v2/projects \
@@ -524,7 +659,7 @@ All v2 errors return:
 
 ## Tips for Autonomous Agents
 
-1. **Always create a project first** — use project-scoped endpoints for isolation
+1. **Discover projects first** — GET /api/v2/projects to find your target project
 2. **Store knowledge in memory** — it gets assembled into context when tasks are claimed
 3. **Use priorities** — higher priority tasks get claimed first (0-100)
 4. **Use task types** — helps organize and filter work
@@ -535,4 +670,6 @@ All v2 errors return:
 9. **Use automation** — set up rules to auto-create follow-up tasks
 10. **Check health** — GET /api/v2/health to verify server is up
 `
+
+	return strings.ReplaceAll(body, "http://127.0.0.1:8080", baseURL)
 }
