@@ -91,7 +91,7 @@ Delete `tasks.db` to reset the database (migrations reapply on next run).
 
 ### Key Architectural Patterns
 
-- **Single-file handlers**: All HTTP handlers are in `main.go` (not split into packages)
+- **Handler files**: HTTP handlers split across `handlers_v2_*.go`, `handlers_v1.go`, and `ui_*.go` in `server/` package
 - **Dual API versioning**: v1 routes (`/task`, `/create`, `/save`) coexist with v2 routes (`/api/v2/*`)
 - **SQLite with pure-Go driver**: Uses `modernc.org/sqlite`, no CGO required
 - **SSE for real-time**: Two subscriber systems - `sseClients` for v1, `v2EventSubscribers` for v2

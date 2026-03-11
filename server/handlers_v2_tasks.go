@@ -1011,6 +1011,10 @@ func v2TaskDetailRouteHandler(w http.ResponseWriter, r *http.Request) {
 		v2TaskCompleteHandler(w, r, parts[0])
 		return
 	}
+	if len(parts) == 2 && parts[1] == "fail" {
+		v2TaskFailHandler(w, r, parts[0])
+		return
+	}
 	if len(parts) == 3 && parts[1] == "dependencies" {
 		v2TaskDependencyDetailHandler(w, r, parts[0], parts[2])
 		return
@@ -1899,5 +1903,81 @@ func v2TaskCompleteHandler(w http.ResponseWriter, r *http.Request, rawID string)
 	writeV2JSON(w, http.StatusOK, map[string]interface{}{
 		"task":    completedTask,
 		"summary": runSummary,
+	})
+}
+
+// v2TaskFailHandler handles POST /api/v2/tasks/{id}/fail
+func v2TaskFailHandler(w http.ResponseWriter, r *http.Request, rawID string) {
+	if r.Method != http.MethodPost {
+		writeV2MethodNotAllowed(w, r, http.MethodPost)
+		return
+	}
+
+	taskID, err := strconv.Atoi(rawID)
+	if err != nil || taskID <= 0 {
+		writeV2Error(w, http.StatusBadRequest, "INVALID_ARGUMENT", "Invalid task ID", map[string]interface{}{
+			"task_id": rawID,
+		})
+		return
+	}
+
+	var req struct {
+		Error   string `json:"error"`
+		Message string `json:"message"`
+	}
+	if r.Body != nil {
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			writeV2Error(w, http.StatusBadRequest, "INVALID_JSON", "Invalid request body", nil)
+			return
+		}
+		if strings.TrimSpace(string(bodyBytes)) != "" {
+			if err := json.Unmarshal(bodyBytes, &req); err != nil {
+				writeV2Error(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON", nil)
+				return
+			}
+		}
+	}
+
+	errMsg := req.Error
+	if errMsg == "" {
+		errMsg = req.Message
+	}
+	if errMsg == "" {
+		errMsg = "Task failed (no error message provided)"
+	}
+
+	task, err := GetTaskV2(db, taskID)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			writeV2Error(w, http.StatusNotFound, "NOT_FOUND", err.Error(), map[string]interface{}{
+				"task_id": taskID,
+			})
+			return
+		}
+		writeV2Error(w, http.StatusInternalServerError, "INTERNAL", err.Error(), map[string]interface{}{
+			"task_id": taskID,
+		})
+		return
+	}
+
+	if task.StatusV2.IsTerminal() {
+		writeV2Error(w, http.StatusConflict, "CONFLICT", "Task is already in a terminal state", map[string]interface{}{
+			"task_id": taskID,
+			"status":  task.StatusV2,
+		})
+		return
+	}
+
+	failedTask, err := FailTaskWithError(db, taskID, errMsg)
+	if err != nil {
+		writeV2Error(w, http.StatusInternalServerError, "INTERNAL", err.Error(), map[string]interface{}{
+			"task_id": taskID,
+		})
+		return
+	}
+
+	writeV2JSON(w, http.StatusOK, map[string]interface{}{
+		"task": failedTask,
 	})
 }

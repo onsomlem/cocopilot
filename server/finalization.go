@@ -91,10 +91,10 @@ type CompletionRunSummary struct {
 func CompleteTaskWithPayload(database *sql.DB, taskID int, output *string) (*TaskV2, *CompletionRunSummary, error) {
 	now := nowISO()
 
-	// 1. Update task status (TOCTOU-safe: AND status != COMPLETE).
+	// 1. Update task status (TOCTOU-safe: only allow from non-terminal states).
 	result, err := database.Exec(
-		"UPDATE tasks SET output = ?, status = ?, status_v2 = ?, updated_at = ? WHERE id = ? AND status != ?",
-		nullString(output), StatusComplete, TaskStatusSucceeded, now, taskID, StatusComplete,
+		"UPDATE tasks SET output = ?, status = ?, status_v2 = ?, updated_at = ? WHERE id = ? AND status != ? AND status != ? AND status_v2 != ?",
+		nullString(output), StatusComplete, TaskStatusSucceeded, now, taskID, StatusComplete, StatusFailed, string(TaskStatusCancelled),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("task status update: %w", err)
@@ -104,7 +104,7 @@ func CompleteTaskWithPayload(database *sql.DB, taskID int, output *string) (*Tas
 		return nil, nil, fmt.Errorf("rows affected: %w", err)
 	}
 	if rows == 0 {
-		return nil, nil, fmt.Errorf("task %d already completed", taskID)
+		return nil, nil, fmt.Errorf("task %d is in a terminal state", taskID)
 	}
 
 	// 2. Get latest run and update its status.

@@ -1,7 +1,7 @@
 # Full Product Audit — Cocopilot
 
-**Date**: 2026-03-04 (Second pass: 2026-03-04)  
-**Auditor**: Automated Agent (Tasks 255, 256)  
+**Date**: 2026-03-04 (Second pass: 2026-03-04, Third pass: 2026-03-04)  
+**Auditor**: Automated Agent (Tasks 255, 256, 257)  
 **Status**: COMPLETE
 
 ---
@@ -36,10 +36,10 @@
 | Severity | Count | Fixed | Verified | Open |
 |----------|-------|-------|----------|------|
 | Critical | 2 | 2 | 2 | 0 |
-| High | 5 | 5 | 5 | 0 |
-| Medium | 6 | 5 | 5 | 1 |
-| Low | 4 | 4 | 4 | 0 |
-| **Total** | **17** | **16** | **16** | **1** |
+| High | 6 | 6 | 6 | 0 |
+| Medium | 10 | 9 | 9 | 1 |
+| Low | 5 | 5 | 5 | 0 |
+| **Total** | **23** | **22** | **22** | **1** |
 
 ## 4. Defect Ledger
 
@@ -62,6 +62,12 @@
 | D015 | Release | Low | tmp/ directory dev scripts not tracked | N/A — false positive | **verified** | `tmp/` in .gitignore, no files tracked |
 | D016 | Docs | Low | Internal packages have no test files | Thin wrappers tested via server package | **fixed** | Added test files for config (12 tests), httputil (11 tests), models (13 tests), policy (9 tests) |
 | D019 | Docs | Low | SECURITY.md "v2.x only" — no version tags in git | Template text | **fixed** | Updated to "latest (main branch)" with note that no tagged releases exist |
+| D020 | Server | High | FAILED tasks can be marked SUCCEEDED via CompleteTask | SQL only checked `status != COMPLETE`, not FAILED/CANCELLED | **fixed** | Added FAILED and CANCELLED checks to completion SQL WHERE clause |
+| D021 | API | Medium | No v2 endpoint to fail a task | Only complete/approve/reject/handoff existed | **fixed** | Added POST `/api/v2/tasks/{id}/fail` handler with error message support |
+| D022 | UI | Medium | Audit page project filter dropdown never populated | No JS code to fetch project list | **fixed** | Added `loadProjects()` function that fetches `/api/v2/projects` and populates select |
+| D023 | UI | Medium | Audit page XSS in payload title attribute | Escaped HTML embedded directly in title attribute via innerHTML | **fixed** | Changed to `setAttribute('title', payload)` to prevent attribute injection |
+| D024 | UI | Low | Runs page dead code — unreachable third empty-check | Three successive `!runs.length` checks, third unreachable | **fixed** | Removed unreachable third check, improved button state on empty |
+| D025 | Docs | Medium | AGENTS.md claims all handlers in main.go | Outdated architecture description | **fixed** | Updated to reflect actual handler file split across `handlers_v2_*.go` files |
 
 ## 5. Fixes Applied
 
@@ -129,6 +135,30 @@
 **Files changed:**
 - `SECURITY.md` — Updated supported versions table from generic "2.x / < 2.0" to "latest (main branch)" with note that no tagged releases have been published yet.
 
+### D020 — State machine: prevent FAILED→SUCCEEDED (High → Fixed, Task 257)
+**Files changed:**
+- `server/finalization.go` — `CompleteTaskWithPayload` SQL now checks `status != StatusComplete AND status != StatusFailed AND status_v2 != 'CANCELLED'`, preventing terminal-state tasks from being marked as succeeded. Error message updated from "already completed" to "in a terminal state".
+
+### D021 — v2 task fail endpoint (Medium → Fixed, Task 257)
+**Files changed:**
+- `server/handlers_v2_tasks.go` — Added `v2TaskFailHandler` (POST `/api/v2/tasks/{id}/fail`). Accepts `{"error":"..."}` or `{"message":"..."}` body. Validates task exists and is not in terminal state. Calls `FailTaskWithError` for canonical failure path. Added route in `v2TaskDetailRouteHandler`.
+
+### D022 — Audit page project filter population (Medium → Fixed, Task 257)
+**Files changed:**
+- `server/ui_page_audit.go` — Added `loadProjects()` async function that fetches `/api/v2/projects` and populates the `#audit-project` select with project options. Changed project select event from `keydown` enter to `change` for immediate filtering.
+
+### D023 — Audit page payload XSS fix (Medium → Fixed, Task 257)
+**Files changed:**
+- `server/ui_page_audit.go` — Replaced inline `title="'+payload+'"` with `setAttribute('title', payload)` to prevent HTML attribute injection. Payload text content still uses `escapeHtml()`.
+
+### D024 — Runs page dead code cleanup (Low → Fixed, Task 257)
+**Files changed:**
+- `server/ui_page_runs.go` — Removed unreachable third `!runs.length` check. Added button disable on empty state at offset 0.
+
+### D025 — AGENTS.md handler description (Medium → Fixed, Task 257)
+**Files changed:**
+- `AGENTS.md` — Updated "Single-file handlers: All HTTP handlers are in main.go" to accurately describe handler files split across `handlers_v2_*.go`, `handlers_v1.go`, and `ui_*.go` in `server/` package.
+
 ### D004 — Audit page event types (Downgraded Low → Verified)
 **Assessment:** Filter options (4 types) match actual `audit.*` event families emitted by the server. Not a defect.
 
@@ -153,7 +183,13 @@
 | D013 | `go build ./...` + code review | Compiles; search filter with Alpine.js x-model binding |
 | D016 | `go test ./internal/...` | 45 new tests across 4 packages all pass |
 | D019 | Manual review | Version table updated to "latest (main branch)" |
-| All | `go test -count=1 ./...` | All tests pass (663 existing + 45 new) |
+| D020 | `go build` + code review | Completion SQL now checks FAILED and CANCELLED states |
+| D021 | `go build` + code review | POST /api/v2/tasks/{id}/fail endpoint with error/message body |
+| D022 | `go build` + code review | `loadProjects()` populates select via `/api/v2/projects` |
+| D023 | `go build` + code review | `setAttribute('title',payload)` instead of innerHTML interpolation |
+| D024 | `go build` + code review | Removed unreachable third empty check |
+| D025 | Manual review | Updated handler description to reflect actual file structure |
+| All | `go test -count=1 ./...` | All tests pass |
 
 ## 7. Remaining Known Issues
 
