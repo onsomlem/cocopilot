@@ -312,6 +312,28 @@ func GetArtifactsByRunID(db *sql.DB, runID string) ([]models.Artifact, error) {
 	return artifacts, nil
 }
 
+func GetArtifactByID(db *sql.DB, id string) (*models.Artifact, error) {
+	var artifact models.Artifact
+	var sha256, metadataJSON sql.NullString
+	var size sql.NullInt64
+	err := db.QueryRow(`
+		SELECT id, run_id, kind, storage_ref, sha256, size, metadata_json, created_at
+		FROM artifacts WHERE id = ?
+	`, id).Scan(&artifact.ID, &artifact.RunID, &artifact.Kind, &artifact.StorageRef,
+		&sha256, &size, &metadataJSON, &artifact.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	artifact.Sha256 = models.PtrString(sha256)
+	artifact.Size = models.PtrInt64(size)
+	if metadataJSON.Valid && metadataJSON.String != "" {
+		if err := models.UnmarshalJSON(metadataJSON.String, &artifact.Metadata); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+		}
+	}
+	return &artifact, nil
+}
+
 func CreateToolInvocation(db *sql.DB, runID, toolName string, input map[string]interface{}) (*models.ToolInvocation, error) {
 	invocation := &models.ToolInvocation{
 		ID:        "tool_" + uuid.New().String(),

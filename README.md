@@ -8,8 +8,16 @@ Cocopilot is an operator-facing console for orchestrating LLM agents on your mac
 - **Agent management** — Register agents, track heartbeats, monitor active leases
 - **Run tracking** — Every task execution is a run with steps, logs, and artifacts
 - **Context packs** — Attach repo files, memories, and policies to agent claims
-- **Automation** — Rules engine for auto-creating follow-up tasks
-- **Events & SSE** — Real-time event stream for all state changes
+- **Automation** — Rules engine for auto-creating follow-up tasks with governance (rate limits, circuit breaker, recursion depth)
+- **Events & SSE** — Real-time event stream for all state changes (19 event families)
+- **Task dependencies** — DAG-based ordering with cycle detection and visual graph
+- **Planning pipeline** — Automated planning cycles with quality scoring and seed prompts
+- **File scanning** — Repository file indexing with .gitignore support
+- **Memory** — Project-scoped key-value storage for cross-task knowledge
+- **Policies** — Governance rules for rate limits, workflow constraints, resource quotas
+- **Audit trail** — Full compliance logging with per-project export
+- **Templates & prompts** — Reusable task templates and prompt management
+- **MCP & VSIX** — VS Code integration via MCP server (48 tools) and extension
 
 ## Quick Start
 

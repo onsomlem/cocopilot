@@ -171,6 +171,9 @@ func CreateArtifact(db *sql.DB, runID, kind, storageRef string, sha256 *string, 
 func GetArtifactsByRunID(db *sql.DB, runID string) ([]Artifact, error) {
 	return dbstore.GetArtifactsByRunID(db, runID)
 }
+func GetArtifactByID(db *sql.DB, id string) (*Artifact, error) {
+	return dbstore.GetArtifactByID(db, id)
+}
 
 // ---- Tool Invocations ----
 

@@ -275,6 +275,37 @@ GET  /api/v2/projects/<project_id>/tree?depth=3
 GET  /api/v2/projects/<project_id>/changes?since=2025-01-01T00:00:00Z
 ` + "```" + `
 
+### Artifacts (diff viewer, run outputs)
+` + "```" + `
+GET  /api/v2/artifacts/<artifact_id>           (metadata)
+GET  /api/v2/artifacts/<artifact_id>/content   (raw content)
+GET  /api/v2/artifacts/<artifact_id>/comments  (line comments)
+POST /api/v2/artifacts/<artifact_id>/comments  {"line_number":10,"body":"...","author":"reviewer"}
+` + "```" + `
+
+### Planning (project planning pipeline)
+` + "```" + `
+GET  /api/v2/projects/<project_id>/planning
+POST /api/v2/projects/<project_id>/planning/run
+GET  /api/v2/projects/<project_id>/planning/cycles
+GET  /api/v2/projects/<project_id>/planning/decisions
+GET  /api/v2/projects/<project_id>/planning/quality
+GET  /api/v2/projects/<project_id>/planning/seed-prompts
+` + "```" + `
+
+### Templates & prompts
+` + "```" + `
+GET  /api/v2/projects/<project_id>/templates
+GET  /api/v2/projects/<project_id>/prompts
+` + "```" + `
+
+### Audit (compliance trail)
+` + "```" + `
+GET  /api/v2/audit                                      (global)
+GET  /api/v2/projects/<project_id>/audit                 (project-scoped)
+GET  /api/v2/projects/<project_id>/audit/export          (export)
+` + "```" + `
+
 ### System
 ` + "```" + `
 GET  /api/v2/health

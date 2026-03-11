@@ -229,60 +229,108 @@ func v2RestoreHandler(cfg runtimeConfig) http.HandlerFunc {
 }
 
 // v2ArtifactCommentsHandler handles GET/POST /api/v2/artifacts/{id}/comments
+// and GET /api/v2/artifacts/{id}/content and GET /api/v2/artifacts/{id}
 func v2ArtifactCommentsHandler(w http.ResponseWriter, r *http.Request) {
-	// Extract artifact ID from path: /api/v2/artifacts/{id}/comments
+	// Extract artifact ID from path: /api/v2/artifacts/{id}[/suffix]
 	path := strings.TrimPrefix(r.URL.Path, "/api/v2/artifacts/")
 	parts := strings.SplitN(path, "/", 2)
-	if len(parts) < 2 || parts[1] != "comments" || parts[0] == "" {
+	if len(parts) == 0 || parts[0] == "" {
 		writeV2Error(w, http.StatusBadRequest, "INVALID_ARGUMENT", "Invalid artifact endpoint format", map[string]interface{}{
 			"path": r.URL.Path,
 		})
 		return
 	}
 	artifactID := parts[0]
+	suffix := ""
+	if len(parts) == 2 {
+		suffix = parts[1]
+	}
 
-	switch r.Method {
-	case http.MethodGet:
-		comments, err := ListArtifactComments(db, artifactID)
-		if err != nil {
-			writeV2Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error(), nil)
+	switch suffix {
+	case "":
+		// GET /api/v2/artifacts/{id} — return artifact metadata
+		if r.Method != http.MethodGet {
+			writeV2MethodNotAllowed(w, r, http.MethodGet)
 			return
 		}
-		if comments == nil {
-			comments = []ArtifactComment{}
+		artifact, err := GetArtifactByID(db, artifactID)
+		if err != nil {
+			writeV2Error(w, http.StatusNotFound, "NOT_FOUND", "Artifact not found", map[string]interface{}{
+				"artifact_id": artifactID,
+			})
+			return
 		}
 		writeV2JSON(w, http.StatusOK, map[string]interface{}{
-			"comments": comments,
+			"artifact": artifact,
 		})
-	case http.MethodPost:
-		var req struct {
-			LineNumber int    `json:"line_number"`
-			Body       string `json:"body"`
-			Author     string `json:"author"`
-			ProjectID  string `json:"project_id"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeV2Error(w, http.StatusBadRequest, "INVALID_JSON", "Invalid request body", nil)
+
+	case "content":
+		// GET /api/v2/artifacts/{id}/content — return artifact content (storage_ref as text)
+		if r.Method != http.MethodGet {
+			writeV2MethodNotAllowed(w, r, http.MethodGet)
 			return
 		}
-		if req.Body == "" {
-			writeV2Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "body is required", nil)
-			return
-		}
-		if req.LineNumber < 1 {
-			writeV2Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "line_number must be >= 1", nil)
-			return
-		}
-		comment, err := CreateArtifactComment(db, artifactID, req.ProjectID, req.LineNumber, req.Body, req.Author)
+		artifact, err := GetArtifactByID(db, artifactID)
 		if err != nil {
-			writeV2Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error(), nil)
+			writeV2Error(w, http.StatusNotFound, "NOT_FOUND", "Artifact not found", map[string]interface{}{
+				"artifact_id": artifactID,
+			})
 			return
 		}
-		writeV2JSON(w, http.StatusCreated, map[string]interface{}{
-			"comment": comment,
-		})
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(artifact.StorageRef))
+
+	case "comments":
+		// GET/POST /api/v2/artifacts/{id}/comments — comments on artifact
+		switch r.Method {
+		case http.MethodGet:
+			comments, err := ListArtifactComments(db, artifactID)
+			if err != nil {
+				writeV2Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error(), nil)
+				return
+			}
+			if comments == nil {
+				comments = []ArtifactComment{}
+			}
+			writeV2JSON(w, http.StatusOK, map[string]interface{}{
+				"comments": comments,
+			})
+		case http.MethodPost:
+			var req struct {
+				LineNumber int    `json:"line_number"`
+				Body       string `json:"body"`
+				Author     string `json:"author"`
+				ProjectID  string `json:"project_id"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				writeV2Error(w, http.StatusBadRequest, "INVALID_JSON", "Invalid request body", nil)
+				return
+			}
+			if req.Body == "" {
+				writeV2Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "body is required", nil)
+				return
+			}
+			if req.LineNumber < 1 {
+				writeV2Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "line_number must be >= 1", nil)
+				return
+			}
+			comment, err := CreateArtifactComment(db, artifactID, req.ProjectID, req.LineNumber, req.Body, req.Author)
+			if err != nil {
+				writeV2Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error(), nil)
+				return
+			}
+			writeV2JSON(w, http.StatusCreated, map[string]interface{}{
+				"comment": comment,
+			})
+		default:
+			writeV2MethodNotAllowed(w, r, http.MethodGet, http.MethodPost)
+		}
+
 	default:
-		writeV2MethodNotAllowed(w, r, http.MethodGet, http.MethodPost)
+		writeV2Error(w, http.StatusBadRequest, "INVALID_ARGUMENT", "Unknown artifact sub-resource", map[string]interface{}{
+			"suffix": suffix,
+		})
 	}
 }
 

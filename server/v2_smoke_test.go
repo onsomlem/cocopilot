@@ -420,6 +420,42 @@ func TestSmokeV2_ArtifactCommentsHandler_GET(t *testing.T) {
 	}
 }
 
+func TestSmokeV2_ArtifactDetailHandler_NotFound(t *testing.T) {
+	_, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/artifacts/nonexistent", nil)
+	w := httptest.NewRecorder()
+	v2ArtifactCommentsHandler(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestSmokeV2_ArtifactContentHandler_NotFound(t *testing.T) {
+	_, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/artifacts/nonexistent/content", nil)
+	w := httptest.NewRecorder()
+	v2ArtifactCommentsHandler(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestSmokeV2_ArtifactHandler_UnknownSuffix(t *testing.T) {
+	_, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/artifacts/test/unknown", nil)
+	w := httptest.NewRecorder()
+	v2ArtifactCommentsHandler(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
 func TestSmokeV2_ProjectDashboardHandler_MissingProject(t *testing.T) {
 	_, cleanup := setupTestDB(t)
 	defer cleanup()

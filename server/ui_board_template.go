@@ -1764,18 +1764,15 @@ const htmlTemplate = `
                             return;
                         }
 
-                        const formData = new FormData();
-                        formData.append('task_id', this.draggingTask.id);
-                        formData.append('status', newStatus);
-
                         const originalStatus = this.draggingTask.status;
                         // Optimistic update
                         this.draggingTask.status = newStatus;
 
                         try {
-                            const response = await fetch('/update-status', {
-                                method: 'POST',
-                                body: formData
+                            const response = await fetch('/api/v2/tasks/' + this.draggingTask.id, {
+                                method: 'PATCH',
+                                headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({status: newStatus})
                             });
                             if (!response.ok) {
                                 this.draggingTask.status = originalStatus;
@@ -1789,17 +1786,13 @@ const htmlTemplate = `
 
                     async deleteTask(taskId) {
                         this.showConfirm('Are you sure you want to delete task #' + taskId + '?', async () => {
-                            const formData = new FormData();
-                            formData.append('task_id', taskId);
-
                             try {
-                                const response = await fetch('/delete', {
-                                    method: 'POST',
-                                    body: formData
+                                const response = await fetch('/api/v2/tasks/' + taskId, {
+                                    method: 'DELETE'
                                 });
                                 if (!response.ok) {
-                                    const text = await response.text();
-                                    this.showToast('Failed to delete task: ' + (text || response.statusText), 'error');
+                                    const data = await response.json().catch(() => ({}));
+                                    this.showToast('Failed to delete task: ' + (data.error?.message || response.statusText), 'error');
                                 } else {
                                     this.showToast('Task #' + taskId + ' deleted', 'success');
                                 }

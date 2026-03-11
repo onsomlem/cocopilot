@@ -8,11 +8,35 @@
 
 This document provides a quick reference to the complete API v2 contract design for Cocopilot. The v2 API introduces multi-project support, execution ledger tracking, agent coordination via leases, structured completion metadata, and real-time events while maintaining full backward compatibility with v1.
 
-## Implementation Snapshot (2026-02-12)
+## Implementation Snapshot (2026-03-04)
 
-- Plan completion estimate: ~60% (backend v2 largely done; UI expansion, governance tooling, and packaging remain incomplete).
-- Migrations `0001`-`0018` applied from `migrations/` (including events filter indexes, task sort indexes, `tasks.updated_at`, and policies storage).
-- v2 endpoints implemented: projects create/list/detail/update/delete, tasks create/list/detail/update/delete, task claim/complete, project task list/create, task dependencies, runs detail/steps/logs/artifacts, memory put/get, context packs, events list/stream, leases create/heartbeat/release, agents list/detail/delete, policies create/list/detail/update/delete, health, config, version.
+- Plan completion estimate: ~90% (backend v2 complete; UI pages functional, MCP/VSIX built).
+- Migrations `0001`-`0030` applied from `migrations/`.
+- **v2 endpoints implemented** (67+ total):
+  - **Projects**: create, list, detail, update, delete, import, export, dashboard
+  - **Tasks**: create, list, detail, update, delete, claim, complete, fail; project-scoped list/create/claim-next
+  - **Task dependencies**: add, list, remove
+  - **Runs**: list, detail (with steps/logs/artifacts/tool-invocations)
+  - **Run sub-resources**: steps (create), logs (create), artifacts (create)
+  - **Artifacts**: detail, content, comments (list/create)
+  - **Leases**: create, heartbeat, release
+  - **Events**: list, stream (SSE); project-scoped stream, replay
+  - **Memory**: put, get (project-scoped)
+  - **Context packs**: create (project-scoped), detail
+  - **Agents**: register, list, detail, delete
+  - **Policies**: create, list, detail, update, delete (project-scoped)
+  - **Automation**: rules list, simulate, replay, stats (project-scoped)
+  - **Audit**: global list, project-scoped list, project-scoped export
+  - **Planning**: state, run cycle, list cycles, decisions, quality, seed prompts (project-scoped)
+  - **Files**: list, scan, detail (project-scoped)
+  - **Templates**: list, detail (project-scoped)
+  - **Workstreams**: list, detail (project-scoped)
+  - **Prompts**: list, detail (project-scoped)
+  - **Project tree & changes**: tree, changes (project-scoped)
+  - **Graphs**: task dependency graph (project-scoped)
+  - **Notifications**: list (project-scoped)
+  - **IDE signals**: list (project-scoped)
+  - **System**: health, status, metrics, version, config, backup, restore, seed-demo
 - v2 task list supports filters (`project_id`, `status`, `type`, `tag`, `q`), `limit`/`offset` pagination with `total`, and `created_at`/`updated_at` sorting.
 - v2 project task list supports filters (`status`, `type`, `tag`, `q`), `limit`/`offset` pagination with `total`, and `created_at`/`updated_at` sorting.
 - v2 events list supports `type`, `since`, `task_id`, `project_id`, `limit`, and `offset` filters with `total`.
@@ -27,7 +51,7 @@ This document provides a quick reference to the complete API v2 contract design 
 - v1 endpoints now return `updated_at` and support expanded filtering/sorting on `GET /api/tasks` and `GET /events`.
 - task.completed rules are configurable; follow-up task creation from `result.next_tasks` honors enablement, limits, and allowlists.
 - Automation engine rules are configured via `COCO_AUTOMATION_RULES`; when unset or empty, no automation tasks are emitted.
-- MCP server and VSIX scaffolds are documented with updated command/tool coverage; packaging and release automation remain pending.
+- MCP server (48 tools) and VSIX extension fully built and functional; packaging and release automation remain pending.
 
 ## Key Documents
 
