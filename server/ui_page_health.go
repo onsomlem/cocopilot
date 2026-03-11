@@ -44,17 +44,32 @@ func healthDashboardHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Audit check runner
 	b.WriteString("async function runAudit(){auditBody.innerHTML='<tr><td colspan=\"4\">Running checks...</td></tr>';")
+
+	// Health checks are generated server-side so new endpoints only need one update.
+	type healthCheck struct {
+		Name     string
+		URL      string
+		Validate string
+	}
+	checks := []healthCheck{
+		{"Health API", "/api/v2/health", "r=>r.ok"},
+		{"Metrics API", "/api/v2/metrics", "r=>r.totals!==undefined"},
+		{"Version API", "/api/v2/version", "r=>r.version!==undefined"},
+		{"Projects List", "/api/v2/projects", "r=>Array.isArray(r)"},
+		{"Tasks List", "/api/v2/tasks", "r=>Array.isArray(r.tasks)"},
+		{"Agents List", "/api/v2/agents", "r=>Array.isArray(r)"},
+		{"Events List", "/api/v2/events", "r=>Array.isArray(r.events)"},
+		{"Runs List", "/api/v2/runs", "r=>Array.isArray(r)"},
+		{"Migrations", "/api/v2/metrics", "r=>r.schema_version&&parseInt(r.schema_version)>=17"},
+		{"v1 Compat (task)", "/task", "(r,raw)=>raw.status===200||raw.status===204"},
+	}
 	b.WriteString("const checks=[")
-	b.WriteString("{name:'Health API',url:'/api/v2/health',validate:r=>r.ok},")
-	b.WriteString("{name:'Metrics API',url:'/api/v2/metrics',validate:r=>r.totals!==undefined},")
-	b.WriteString("{name:'Version API',url:'/api/v2/version',validate:r=>r.version!==undefined},")
-	b.WriteString("{name:'Projects List',url:'/api/v2/projects',validate:r=>Array.isArray(r)},")
-	b.WriteString("{name:'Tasks List',url:'/api/v2/tasks',validate:r=>Array.isArray(r.tasks)},")
-	b.WriteString("{name:'Agents List',url:'/api/v2/agents',validate:r=>Array.isArray(r)},")
-	b.WriteString("{name:'Events List',url:'/api/v2/events',validate:r=>Array.isArray(r.events)},")
-	b.WriteString("{name:'Runs List',url:'/api/v2/runs',validate:r=>Array.isArray(r)},")
-	b.WriteString("{name:'Migrations',url:'/api/v2/metrics',validate:r=>r.schema_version&&parseInt(r.schema_version)>=17},")
-	b.WriteString("{name:'v1 Compat (task)',url:'/task',validate:(r,raw)=>raw.status===200||raw.status===204},")
+	for i, c := range checks {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		fmt.Fprintf(&b, "{name:'%s',url:'%s',validate:%s}", c.Name, c.URL, c.Validate)
+	}
 	b.WriteString("];")
 	b.WriteString("let html='';for(const c of checks){const t0=performance.now();let status='PASS',detail='';")
 	b.WriteString("try{const res=await fetch(c.url);const ms=Math.round(performance.now()-t0);")

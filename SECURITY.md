@@ -25,8 +25,10 @@ Instead, please email the maintainers directly or use GitHub's private vulnerabi
 
 | Version | Supported |
 |---------|-----------|
-| 2.x     | Yes       |
-| < 2.0   | No        |
+| latest (main branch) | Yes |
+
+Cocopilot does not currently use tagged releases. The latest commit on `main`
+is the supported version.
 
 ## Security Best Practices
 

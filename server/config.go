@@ -386,7 +386,7 @@ Use the project ID from the response in all project-scoped API calls.
 ### Step 1: Create a Project (if needed)
 
 ` + "```bash" + `
-curl -s -X POST http://127.0.0.1:8080/api/v2/projects \
+curl -s -X POST ` + baseURL + `/api/v2/projects \
   -H "Content-Type: application/json" \
   -d '{
     "name": "my-project",
@@ -402,7 +402,7 @@ Save the project ID for all subsequent calls.
 
 ` + "```bash" + `
 # Create a task in the project
-curl -s -X POST http://127.0.0.1:8080/api/v2/projects/PROJECT_ID/tasks \
+curl -s -X POST ` + baseURL + `/api/v2/projects/PROJECT_ID/tasks \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Analyze codebase",
@@ -417,7 +417,7 @@ curl -s -X POST http://127.0.0.1:8080/api/v2/projects/PROJECT_ID/tasks \
 
 ` + "```bash" + `
 # Claim the next available task (highest priority first)
-curl -s -X POST http://127.0.0.1:8080/api/v2/projects/PROJECT_ID/tasks/claim-next \
+curl -s -X POST ` + baseURL + `/api/v2/projects/PROJECT_ID/tasks/claim-next \
   -H "Content-Type: application/json" \
   -d '{"agent_id": "my-agent"}' | jq .
 ` + "```" + `
@@ -427,7 +427,7 @@ Response includes: task details, run ID, lease, assembled context (memory, depen
 ### Step 4: Complete Tasks
 
 ` + "```bash" + `
-curl -s -X POST http://127.0.0.1:8080/api/v2/tasks/TASK_ID/complete \
+curl -s -X POST ` + baseURL + `/api/v2/tasks/TASK_ID/complete \
   -H "Content-Type: application/json" \
   -d '{
     "output": "Summary of work done",
@@ -443,7 +443,7 @@ curl -s -X POST http://127.0.0.1:8080/api/v2/tasks/TASK_ID/complete \
 
 ` + "```bash" + `
 while true; do
-  RESPONSE=$(curl -s -X POST http://127.0.0.1:8080/api/v2/projects/PROJECT_ID/tasks/claim-next \
+  RESPONSE=$(curl -s -X POST ` + baseURL + `/api/v2/projects/PROJECT_ID/tasks/claim-next \
     -H "Content-Type: application/json" \
     -d '{"agent_id": "my-agent"}')
 
@@ -451,7 +451,7 @@ while true; do
     TASK_ID=$(echo "$RESPONSE" | jq -r '.task.id')
     INSTRUCTIONS=$(echo "$RESPONSE" | jq -r '.task.instructions')
     # ... do work based on INSTRUCTIONS ...
-    curl -s -X POST "http://127.0.0.1:8080/api/v2/tasks/$TASK_ID/complete" \
+    curl -s -X POST "` + baseURL + `/api/v2/tasks/$TASK_ID/complete" \
       -H "Content-Type: application/json" \
       -d "{\"output\": \"work done\"}"
   fi
@@ -660,12 +660,12 @@ Store persistent knowledge that gets assembled into task context on claim:
 
 ` + "```bash" + `
 # Store a fact
-curl -s -X PUT http://127.0.0.1:8080/api/v2/projects/PROJECT_ID/memory \
+curl -s -X PUT ` + baseURL + `/api/v2/projects/PROJECT_ID/memory \
   -H "Content-Type: application/json" \
   -d '{"scope": "architecture", "key": "stack", "value": {"lang": "Go", "db": "SQLite"}}'
 
 # Retrieve all memory
-curl -s http://127.0.0.1:8080/api/v2/projects/PROJECT_ID/memory | jq .
+curl -s ` + baseURL + `/api/v2/projects/PROJECT_ID/memory | jq .
 ` + "```" + `
 
 ## Environment Variables
@@ -702,5 +702,5 @@ All v2 errors return:
 10. **Check health** — GET /api/v2/health to verify server is up
 `
 
-	return strings.ReplaceAll(body, "http://127.0.0.1:8080", baseURL)
+	return body
 }

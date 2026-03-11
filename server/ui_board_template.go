@@ -865,10 +865,12 @@ const htmlTemplate = `
                         </div>
                         <div class="form-group">
                             <label>Parent Task (optional)</label>
-                            <select x-model="newTaskParentId">
+                            <input type="text" x-model="parentSearchFilter" placeholder="Type to filter tasks…"
+                                   style="width:100%;background:var(--vscode-input-bg);border:1px solid var(--vscode-border);border-radius:6px;color:var(--vscode-text);font-family:inherit;font-size:12px;padding:6px 10px;outline:none;margin-bottom:4px;">
+                            <select x-model="newTaskParentId" style="max-height:200px;">
                                 <option value="">No parent (standalone task)</option>
-                                <template x-for="task in tasks" :key="task.id">
-                                    <option :value="task.id" x-text="'#' + task.id + ': ' + task.instructions.substring(0, 50) + (task.instructions.length > 50 ? '...' : '')"></option>
+                                <template x-for="task in tasks.filter(t => { if (!parentSearchFilter) return true; const q = parentSearchFilter.toLowerCase(); return ('#'+t.id).includes(q) || (t.title||'').toLowerCase().includes(q) || (t.instructions||'').toLowerCase().includes(q); })" :key="task.id">
+                                    <option :value="task.id" x-text="'#' + task.id + ': ' + (task.title || task.instructions.substring(0, 50) + (task.instructions.length > 50 ? '...' : ''))"></option>
                                 </template>
                             </select>
                         </div>
@@ -1370,6 +1372,7 @@ const htmlTemplate = `
                     copiedInstructions: false,
                     newTaskInstructions: '',
                     newTaskParentId: '',
+                    parentSearchFilter: '',
                     newTaskTitle: '',
                     newTaskType: '',
                     newTaskPriority: '',
@@ -1727,6 +1730,7 @@ const htmlTemplate = `
 
                         this.newTaskInstructions = '';
                         this.newTaskParentId = '';
+                        this.parentSearchFilter = '';
                         this.newTaskTitle = '';
                         this.newTaskType = '';
                         this.newTaskPriority = '';

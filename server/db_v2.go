@@ -91,6 +91,9 @@ func TaskDependencyCreatesCycle(db *sql.DB, taskID int, dependsOnTaskID int) (bo
 func ListTaskDependencies(db *sql.DB, taskID int) ([]TaskDependency, error) {
 	return dbstore.ListTaskDependencies(db, taskID)
 }
+func ListAllDependenciesForProject(db *sql.DB, projectID string) ([]TaskDependency, error) {
+	return dbstore.ListAllDependenciesForProject(db, projectID)
+}
 func DeleteTaskDependency(db *sql.DB, taskID int, dependsOnTaskID int) (bool, error) {
 	return dbstore.DeleteTaskDependency(db, taskID, dependsOnTaskID)
 }

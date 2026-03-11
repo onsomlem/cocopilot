@@ -958,14 +958,13 @@ func v2ProjectGraphTasksHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Add dependency edges
-	for _, t := range tasks {
-		deps, err := ListTaskDependencies(db, t.ID)
-		if err != nil {
-			continue
-		}
-		for _, dep := range deps {
-			edges = append(edges, graphEdge{From: dep.DependsOnTaskID, To: dep.TaskID, Type: "depends_on"})
+	// Add dependency edges (single query instead of per-task)
+	allDeps, err := ListAllDependenciesForProject(db, projectID)
+	if err == nil {
+		for _, dep := range allDeps {
+			if taskIDs[dep.TaskID] && taskIDs[dep.DependsOnTaskID] {
+				edges = append(edges, graphEdge{From: dep.DependsOnTaskID, To: dep.TaskID, Type: "depends_on"})
+			}
 		}
 	}
 

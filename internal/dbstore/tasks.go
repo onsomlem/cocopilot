@@ -622,6 +622,36 @@ func ListTaskDependencies(db *sql.DB, taskID int) ([]models.TaskDependency, erro
 	return deps, nil
 }
 
+// ListAllDependenciesForProject fetches all task_dependencies rows for tasks
+// belonging to the given project in a single query, avoiding N+1.
+func ListAllDependenciesForProject(db *sql.DB, projectID string) ([]models.TaskDependency, error) {
+	rows, err := db.Query(
+		`SELECT td.task_id, td.depends_on_task_id
+		 FROM task_dependencies td
+		 INNER JOIN tasks t ON t.id = td.task_id
+		 WHERE t.project_id = ?
+		 ORDER BY td.task_id, td.depends_on_task_id`,
+		projectID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query project dependencies: %w", err)
+	}
+	defer rows.Close()
+
+	deps := make([]models.TaskDependency, 0)
+	for rows.Next() {
+		var dep models.TaskDependency
+		if err := rows.Scan(&dep.TaskID, &dep.DependsOnTaskID); err != nil {
+			return nil, fmt.Errorf("failed to scan task dependency: %w", err)
+		}
+		deps = append(deps, dep)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed while iterating project dependencies: %w", err)
+	}
+	return deps, nil
+}
+
 func DeleteTaskDependency(db *sql.DB, taskID int, dependsOnTaskID int) (bool, error) {
 	result, err := db.Exec(
 		"DELETE FROM task_dependencies WHERE task_id = ? AND depends_on_task_id = ?",
